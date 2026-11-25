@@ -220,6 +220,20 @@ patch_any("'cat-tax': t => { const c = bkCats()[+t.dataset.i]; if (!c) return;",
 # SaaS features page: a configured feature's action reads "Edit" (was "Add country")
 patch_any('data-act="ft-cfg" data-k="${esc(x.key)}">Add country</button>', 'data-act="ft-cfg" data-k="${esc(x.key)}">Edit</button>')
 
+# Default product catalogs (Data & Intelligence, Communicate, Touchpoints, Services): existing SKUs can be assigned;
+# New SKU and Bulk upload stay disabled with the designer's lock tooltip
+LOCK_TIP = "Product catalogs have a fixed set of SKUs, so new SKUs can’t be added."
+patch_any("c.archived ? 'This catalog is archived. Restore it to add SKUs.' : c.locked ? lockTip : '';",
+          "c.archived ? 'This catalog is archived. Restore it to add SKUs.' : '';   // a product catalog only takes existing SKUs (set per option)")
+patch_any('`<button role="menuitem" data-act="cat-add" data-m="${m}" data-k="${esc(c.name)}" ${m === \'single\' && saasNoNew(c) ?',
+          '`<button role="menuitem" data-act="cat-add" data-m="${m}" data-k="${esc(c.name)}" ${c.locked && m !== \'existing\' ? `aria-disabled="true" data-tip="${esc(lockTip)}"` : m === \'single\' && saasNoNew(c) ?')
+patchA('decl:cmAddOpts', ": m === 'single' && saasNoNew(c) ?", ": c.locked && m !== 'existing' ? `aria-disabled=\"true\" data-tip=\"" + LOCK_TIP + "\"` : m === 'single' && saasNoNew(c) ?")
+patch_any("${dz || (saasNoNew(c) ?", "${dz || (c.locked ? `aria-disabled=\"true\" data-tip=\"${esc(lockTip)}\"` : saasNoNew(c) ?")
+patch_any('data-m="file" data-k="${esc(c.name)}" ${dz}>upload a CSV', 'data-m="file" data-k="${esc(c.name)}" ${dz || (c.locked ? `aria-disabled="true" data-tip="${esc(lockTip)}"` : \'\')}>upload a CSV')
+patch_any('data-act="cat-add" data-m="existing" data-k="${esc(c.name)}" ${cm.locked ? \'aria-disabled="true" data-tip="Product catalogs have a fixed set of SKUs, so new SKUs can’t be added."\' : \'\'}>',
+          'data-act="cat-add" data-m="existing" data-k="${esc(c.name)}">')
+patch_any("if (!c || !can.sku() || c.locked || (m === 'single' && saasNoNew(c))) return;", "if (!c || !can.sku() || (c.locked && m !== 'existing') || (m === 'single' && saasNoNew(c))) return;")
+
 # plans and add-on packs (embedded page): the approver comes from Approval configuration › Revise plan
 patchA('decl:pkDoc', "(T() === 'md')", "apPlanMine()")
 patchA('decl:pkFrame', "if (!can.sku() && T() !== 'md') return noAccess(label);", "if (!can.sku() && T() !== 'md' && !apPlanMine()) return noAccess(label);")
