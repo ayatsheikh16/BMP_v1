@@ -162,7 +162,7 @@ patchA('decl:nsCur', "const nsCur = cty => cty === 'GL' ? 'INR' :", "const nsCur
 ONOFF_FEATS = [('Data and segments', ['Data ingestion (SDK and pixel)', 'Data ingestion (CRM)', 'Data ingestion (Files)', 'Data ingestion (APIs)',
     'Segment Builder + Re-targeting (Portfolio)', 'Segment Builder + Re-targeting (Projects)', 'Funnel analytics + Re-targeting',
     'Event Analytics (Mixpanel/Amplitude Grade) + Re-targeting', 'CQL — Clarity Query Language', 'Journeys (Sankey)', 'SCV (Basic + Events)', 'SCV (Advanced)']),
-  ('Campaigns and workflows', ['Campaign scheduling + failover', 'Workflow Builder', 'AI Optimiser (WHEN + WHERE)', 'Workflow - AB Test Node', 'Workflow - API Node',
+  ('Campaigns and workflows', ['Campaign scheduling + failover', 'Workflow Builder', 'AI Optimiser (WHEN + WHERE)', 'Events and Triggers', 'Workflow - AB Test Node', 'Workflow - API Node',
     'Campaigns - AB Test', 'Campaigns - Single Channel', 'Campaigns - MCO', 'Campaigns via Files', 'Campaigns via Segments']),
   ('Links and QR codes', ['QR Code Customisation', 'Smart Redirections (conditional landing)', 'Shortlinks & QR Codes']),
   ('Content and analytics', ['Content Studio', 'Analyse - Dashboard', 'Analyse - Reports'])]
@@ -171,7 +171,7 @@ FEAT_KEYS = {   # short keys, like the designer's ('sso', 'custom-domains'): the
   'Segment Builder + Re-targeting (Portfolio)':'segment-portfolio', 'Segment Builder + Re-targeting (Projects)':'segment-projects', 'Funnel analytics + Re-targeting':'funnel',
   'Event Analytics (Mixpanel/Amplitude Grade) + Re-targeting':'event-analytics', 'CQL — Clarity Query Language':'cql', 'Journeys (Sankey)':'journeys',
   'SCV (Basic + Events)':'scv-basic', 'SCV (Advanced)':'scv-advanced', 'Campaign scheduling + failover':'campaign-schedule', 'Workflow Builder':'workflow-builder',
-  'AI Optimiser (WHEN + WHERE)':'ai-optimiser', 'Workflow - AB Test Node':'workflow-ab', 'Workflow - API Node':'workflow-api', 'Campaigns - AB Test':'campaign-ab',
+  'AI Optimiser (WHEN + WHERE)':'ai-optimiser', 'Events and Triggers':'events-triggers', 'Workflow - AB Test Node':'workflow-ab', 'Workflow - API Node':'workflow-api', 'Campaigns - AB Test':'campaign-ab',
   'Campaigns - Single Channel':'campaign-single', 'Campaigns - MCO':'campaign-mco', 'Campaigns via Files':'campaign-files', 'Campaigns via Segments':'campaign-segments',
   'QR Code Customisation':'qr-custom', 'Smart Redirections (conditional landing)':'smart-redirect', 'Shortlinks & QR Codes':'shortlinks',
   'Content Studio':'content-studio', 'Analyse - Dashboard':'analyse-dashboard', 'Analyse - Reports':'analyse-reports'}
@@ -179,7 +179,7 @@ def _fkey(n): return FEAT_KEYS[n]
 _rows = ',\n'.join(f"  [{json.dumps(_fkey(n))}, {json.dumps(n)}, {json.dumps('On/off feature · ' + g)}, [['IN', 'onoff', 0, '', 'Monthly', 'Active']]]" for g, L in ONOFF_FEATS for n in L)
 patchA('decl:FT_SEED', "  ['sso', 'Single sign-on', 'SAML and OIDC sign-in for workspaces.', [['IN', 'onoff', 2500, '', 'Monthly', 'Active']]],\n", _rows + ',\n')
 patchA('decl:FT_SEED', "  ['custom-domains', 'Custom domains', 'Branded short links on the customer’s own domain.', [['IN', 'onoff', 1500, '', 'Monthly', 'Active']]],\n", '')
-assert len(set(_fkey(n) for g, L in ONOFF_FEATS for n in L)) == 28
+assert len(set(_fkey(n) for g, L in ONOFF_FEATS for n in L)) == 29
 
 # SaaS charged-by-usage features = the Core features of Plans › Modify plan (Helo Clarity): its usage rates and seats,
 # priced at the catalogue base rates, so they're what a "Charged by usage" SaaS catalog can pick
@@ -268,6 +268,76 @@ patchA('decl:cmNav', '<div class="b4 ctl-none" hidden>No catalogs match.</div>',
        '${open ? `<div class="ctl-list ctl-arch" aria-label="Archived catalogs">${AR.map(item).join(\'\')}</div>` : \'\'}`)(!!S._cmArch || AR.some(c => active === \'cat:\' + c.name)) : \'\'}')
 Akey['decl:cmNav']['text'] += "\nACT['cm-arch'] = () => { S._cmArch = !S._cmArch; render(); };"
 
+# SaaS features: the status filter lists the statuses the table shows (Active, Pending approval … Unconfigured), not Configured/Unconfigured
+patchA('decl:cmFeatsView', "stOf = x => x.cfgs.length ? 'configured' : 'new';",
+       "stOf = x => x.cfgs.length ? [...new Set(x.cfgs.map(g => g.status))] : ['Unconfigured'], ST_ORDER = ['Active','Pending approval','Draft','Sent back','Inactive','Rejected','Unconfigured'];")
+patchA('decl:cmFeatsView', "(!f.st.length || f.st.includes(stOf(x)))", "(!f.st.length || stOf(x).some(v => f.st.includes(v)))")
+patchA('decl:cmFeatsView', "[['new', 'Unconfigured'], ['configured', 'Configured']]",
+       "[...new Set(L0.flatMap(stOf))].sort((a, b) => (ST_ORDER.indexOf(a) + 99) % 99 - (ST_ORDER.indexOf(b) + 99) % 99).map(v => [v, v])")
+
+# Revise catalog: the same fields as Create catalog (code, name, description, type, and the type's channels / charging /
+# services); the type is locked. Revising never adds or removes SKUs (Add SKU does that). Changes go for approval.
+REV_OLD = 'body.innerHTML = `<div class="fgrid qm-rev"><div class="field"><label for="bk-code">Catalog code</label><input class="inp num bk-code" id="bk-code" value="${esc(B.code)}" readonly aria-describedby="bk-code-h"><span class="hint" id="bk-code-h">Can’t be changed.</span></div>\n          <div class="field"><label for="bk-cat">Name</label><input class="inp${B.errs.cat ? \' bad\' : \'\'}" id="bk-cat" data-inp="bk" data-k="cat" maxlength="60" value="${esc(B.cat)}" autocomplete="off">${err(\'cat\')}</div>\n          <div class="field full"><label for="bk-desc">Description${OPT}</label><textarea class="inp" id="bk-desc" data-inp="bk" data-k="desc" rows="2" maxlength="300">${esc(B.desc || \'\')}</textarea></div>\n          <div class="full">${G(\'cats\', \'Allowed categories\', bkCats().map(c => [c.name, c.name]), \'A SKU picks one of these. Its category sets the tax code.\', \'bk-addcat\', \'Select categories\', \'category\')}</div>\n          <div class="full">${G(\'attrs\', \'Required SKU attributes\', CAT_ATTRS, \'Every SKU in this catalog must fill these before it can be activated.\', \'\', \'Select attributes\', \'attribute\')}</div></div>\n        ${P.upload || \'\'}`;'
+patch_any(REV_OLD, """body.innerHTML = `<div class="fgrid qm-rev"><div class="field"><label for="bk-code">Catalog code</label><input class="inp num bk-code" id="bk-code" value="${esc(B.code)}" readonly aria-describedby="bk-code-h"><span class="hint" id="bk-code-h">Can’t be changed.</span></div>
+          <div class="field"><label for="bk-cat">Catalog name</label><input class="inp${B.errs.cat ? ' bad' : ''}" id="bk-cat" data-inp="bk" data-k="cat" maxlength="60" value="${esc(B.cat)}" autocomplete="off">${err('cat')}</div>
+          <div class="field full"><label for="bk-desc">Description${OPT}</label><textarea class="inp" id="bk-desc" data-inp="bk" data-k="desc" rows="2" maxlength="300">${esc(B.desc || '')}</textarea></div>
+          ${bkTaxSection(B, B.errs, err, G)}</div>`;""")
+patch_any("data-act=\"bk-type-pick\" data-v=\"${v}\">${l}</button>", "data-act=\"bk-type-pick\" data-v=\"${v}\" ${B.revise ? 'disabled data-tip=\"A catalog’s type can’t be changed.\"' : ''}>${l}</button>")
+patch_any("${changes && bkDetailsOk(B) && bkExOk(B) ? '' : 'disabled'}", "${changes && bkDetailsOk(B) ? '' : 'disabled'}")
+patch_any("revise:c.name, mode:'existing', step:'upload',", "revise:c.name, mode:'existing', step:'upload', chans:[...(c.chans || [])], svcs:[...(c.svcs || [])], access:c.access || '',")
+# what counts as a change: name, description and the type's setting (SKUs aren't edited here)
+patchA('decl:bkReviseChanges', """  const now = new Set(S.skus.filter(x => x.catalogName === B.revise && x.status === 'Active').map(x => x.code)), sel = new Set(B.ex.map(x => x.code));
+  B.ex.forEach(x => { const s = sku(x.code); if (!s) return; if (!now.has(x.code)) n++; if (!bkFeat(B) && String(x.base).trim() && +x.base !== s.base) n++; });
+  now.forEach(c => { if (!sel.has(c)) n++; });""", """  catRevSets(B, cur).forEach(() => n++);""")
+Akey['decl:bkReviseChanges']['text'] += r"""
+/* the type's own setting, changed in a revision: Allowed channels (Messaging), How are features charged? (SaaS), Allowed services (Services) */
+function catRevSets(B, cur){ const L = [], j = a => (a || []).join('|'), chan = v => (BK_CHANS.find(x => x[0] === v) || [, v])[1], acc = v => (BK_ACCESS.find(x => x[0] === v) || [, v || '—'])[1];
+  if (cur.prod === 'messaging' && j(B.chans) !== j(cur.chans)) L.push({code:'—', field:'Allowed channels', old:(cur.chans || []).map(chan).join(', ') || 'None', next:(B.chans || []).map(chan).join(', ') || 'None', eff:'On approval', _f:'catset', _key:'chans', _v:[...(B.chans || [])], _code:cur.code});
+  if (cur.prod === 'clarity' && (B.access || '') !== (cur.access || '')) L.push({code:'—', field:'How features are charged', old:acc(cur.access), next:acc(B.access), eff:'On approval', _f:'catset', _key:'access', _v:B.access, _code:cur.code});
+  if (cur.prod === 'svc' && j(B.svcs) !== j(cur.svcs)) L.push({code:'—', field:'Allowed services', old:(cur.svcs || []).join(', ') || 'None', next:(B.svcs || []).join(', ') || 'None', eff:'On approval', _f:'catset', _key:'svcs', _v:[...(B.svcs || [])], _code:cur.code});
+  return L; }"""
+# submit: a revision only sends its field changes
+patchA('decl:bkSubmitExisting', "if (!bkDetailsOk(B) || !bkExOk(B)){", "if (!bkDetailsOk(B) || (!B.revise && !bkExOk(B))){")
+patchA('decl:bkSubmitExisting', "  B.ex.forEach(x => { const s = sku(x.code); if (!s) return; const nv = +(+x.base).toFixed(4);", "  (B.revise ? [] : B.ex).forEach(x => { const s = sku(x.code); if (!s) return; const nv = +(+x.base).toFixed(4);")
+patchA('decl:bkSubmitExisting', "    S.skus.filter(x => x.catalogName === B.revise && x.status === 'Active' && !keep.has(x.code)).forEach(x => lines.push({code:x.code, field:'Catalog', old:B.revise, next:'—', eff:'On approval', _f:'catalog'}));\n", "")
+patchA('decl:bkSubmitExisting', "    if (!lines.length){ return toast('Nothing has changed yet.', 'info'); } }",
+       "    if (cur){ if (cur.prod === 'messaging' && !(B.chans || []).length) return toast('Choose at least one channel.', 'err'); if (cur.prod === 'svc' && !(B.svcs || []).length) return toast('Choose at least one service.', 'err'); if (cur.prod === 'clarity' && !B.access) return toast('Choose how features are charged.', 'err'); lines.push(...catRevSets(B, cur)); }\n    if (!lines.length){ return toast('Nothing has changed yet.', 'info'); } }")
+patchA('decl:bkSubmitExisting', "  const nc = lines.filter(l => l._f === 'rate').length, id = 'CR-0' + (150 + S.changeReqs.length);",
+       "  const nc = lines.filter(l => l._f === 'rate').length, id = 'CR-0' + (Math.max(150, ...S.changeReqs.map(r => +String(r.id).replace(/\\D/g, '') || 0)) + 1);")
+patchA('decl:bkSubmitExisting', "  if (B.modal) qmClose(); S.bk = null; toast(`${id} sent to the MD · ${plural(B.ex.length, feat ? 'feature' : 'SKU')}${nc ? `, ${plural(nc, 'new version')}` : ''}.`, 'ok'); cmBack();",
+       "  if (B.modal) qmClose(); const wasRev = B.revise; S.bk = null; toast(wasRev ? `${id} sent for approval · ${plural(lines.length, 'change')}.` : `${id} sent to the MD · ${plural(B.ex.length, feat ? 'feature' : 'SKU')}${nc ? `, ${plural(nc, 'new version')}` : ''}.`, 'ok'); cmBack();")
+# approved → the catalog takes the new setting
+patchA('ACT:cr-decide', "    c.lines.forEach(l => { if (l._f === 'newcat'){", "    c.lines.forEach(l => { if (l._f === 'catset'){ const k = S.catalogs.find(x => x.code === l._code); if (k) k[l._key] = Array.isArray(l._v) ? [...l._v] : l._v; return; } if (l._f === 'newcat'){")
+
+# Default catalogs hold the product features listed for them in Plans › Modify plan (Helo Clarity), per the Feature
+# Inclusions sheet; "Assign existing SKUs" in one of them offers only that catalog's own features.
+DEF_CAT_FEATS = {'Data & Intelligence':['ingest-sdk','ingest-files','segment-projects','funnel','scv-basic','ingest-api','segment-portfolio','event-analytics','cql','journeys','scv-advanced'],
+  'Communicate':['campaign-schedule','workflow-builder','campaign-single','campaign-mco','campaign-files','ai-optimiser','events-triggers','workflow-ab','workflow-api','campaign-ab','campaign-segments','analyse-dashboard','analyse-reports','content-studio'],
+  'Touchpoints':['shortlinks','qr-custom','smart-redirect']}
+assert all(k in FEAT_KEYS.values() for L in DEF_CAT_FEATS.values() for k in L)
+patchA('decl:bkExPool', "const bkExPool = B =>", "const bkExPool0 = B =>")
+Akey['decl:bkExPool']['text'] += """
+/* default catalogs: their SKU list is the product features Plans lists for them */
+const DEF_CAT_FEATS = """ + json.dumps(DEF_CAT_FEATS) + """;
+const defCatCodes = name => DEF_CAT_FEATS[name] ? new Set(DEF_CAT_FEATS[name].map(k => 'FT-' + k.toUpperCase() + '-IN')) : null;
+const bkExPool = B => { const L = defCatCodes(B.fixed); if (L) return S.skus.filter(s => L.has(s.code) && s.status === 'Active');   // in a default catalog: only its own features
+  const c = B.fixed && catByName(B.fixed); if (c && c.ch) return bkExPool0(B).filter(s => s.catalogue === c.name || cmChan(s) === c.name);   // SMS, RCS, WhatsApp: only that channel's SKUs
+  return bkExPool0(B); };
+function defCatSync(){ skuCatalogs(); ftList();
+  const saas = (bkCats().find(k => k.cty === 'IN' && k.kind === 'saas') || {}).name;
+  Object.keys(DEF_CAT_FEATS).forEach(name => { const c = catByName(name); if (!c) return; const L = defCatCodes(name);
+    Object.assign(c, {prod:'clarity', access:'onoff', chans:[]});   // a SaaS catalog has no channels if (saas && !c.categories.includes(saas)) c.categories.unshift(saas);
+    S.skus.filter(s => s.catalogName === name && !L.has(s.code)).forEach(s => Object.assign(s, {catalogName:null, catalogCategory:null, unassigned:true}));   // what isn't a Plans feature of this catalog moves out: unassigned, still in All SKUs
+    S.skus.filter(s => L.has(s.code)).forEach(s => Object.assign(s, {catalogName:name, catalogCategory:saas || s.catalogCategory, unassigned:false})); }); }"""
+
+# Assign existing SKUs: when every SKU related to the catalog is already in it (or there are none), show an empty state
+patchA('decl:bkpPaint', "  const filtered = P.q || P.cty.length || P.ch.length || P.only;\n",
+       """  const filtered = P.q || P.cty.length || P.ch.length || P.only;
+  if (B.fixed && !filtered && (!pool.length || pool.every(s => s.catalogName === B.cat))){
+    box.innerHTML = `<div class="bkp-none"><span class="b3">No ${noun}s related to this catalog</span><span class="b4">${pool.length ? `Every ${noun} related to ${esc(B.cat)} is already in it.` : `There are no approved ${noun}s related to ${esc(B.cat)} yet.`}</span></div>`;
+    bkpFoot(); const sm = $('#bkp-sum'); if (sm) sm.textContent = ''; return; }
+""")
+
 # plans and add-on packs (embedded page): the approver comes from Approval configuration › Revise plan
 patchA('decl:pkDoc', "(T() === 'md')", "apPlanMine()")
 patchA('decl:pkFrame', "if (!can.sku() && T() !== 'md') return noAccess(label);", "if (!can.sku() && T() !== 'md' && !apPlanMine()) return noAccess(label);")
@@ -311,7 +381,7 @@ INTEGRATE = AC_JS + '\n' + open(os.path.join(HERE, 'integrate.js'), encoding='ut
 js = '\n'.join(c['text'] for c in A if c['text'] != '') + \
      '\n\n/* =====================================================================\n   FROM "DASHBOARD AND APPROVAL CONFIGURATION": Home 2 dashboard, approval configuration and their helpers\n   ===================================================================== */\n' + \
      B_JS + '\n\n' + INTEGRATE + \
-     "\n/* =====================================================================\n   BOOT\n   ===================================================================== */\nh2Seed();\ntrialDocApi.resume();\nentApi.restore();\nif (!PERSONA_SWITCH.includes(S.user)) S.user = 'meera';\nrender();\n"
+     "\n/* =====================================================================\n   BOOT\n   ===================================================================== */\nh2Seed();\ndefCatSync();\ntrialDocApi.resume();\nentApi.restore();\nif (!PERSONA_SWITCH.includes(S.user)) S.user = 'meera';\nrender();\n"
 
 ZOOM_JS = """/* File 2 drew the portal at 90% browser zoom. The merged portal uses one scale for every screen:
    set UI_ZOOM to 0.9 to see everything the way file 2 showed it. File 2's code reads positions through zRect() / zIW() etc. */

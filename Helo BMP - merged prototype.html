@@ -13341,7 +13341,7 @@ ACT['cr-decide'] = t => {
     if (apCrAdvance(c)) return render();   // more approval levels to go
     c.status = 'Approved'; c.decidedBy = apCrDecider(); c.decidedOn = 0;
     if (c.maker !== c.decidedBy) S.notifs.unshift({for:c.maker, to:[], on:0, text:`${c.decidedBy === 'System' ? 'No approval was needed for' : fullOf(c.decidedBy) + ' approved'} ${c.id}: ${c.title}.`, go:{v:'skus'}});
-    c.lines.forEach(l => { if (l._f === 'newcat'){ const k = bkCats().find(x => x.name === l._cat); if (k) delete k.pending; return; } if (l._f === 'catrename'){ const k = catByName(l.old); if (k) k.name = l.next; S.skus.forEach(x => { if (x.catalogName === l.old) x.catalogName = l.next; }); return; }
+    c.lines.forEach(l => { if (l._f === 'catset'){ const k = S.catalogs.find(x => x.code === l._code); if (k) k[l._key] = Array.isArray(l._v) ? [...l._v] : l._v; return; } if (l._f === 'newcat'){ const k = bkCats().find(x => x.name === l._cat); if (k) delete k.pending; return; } if (l._f === 'catrename'){ const k = catByName(l.old); if (k) k.name = l.next; S.skus.forEach(x => { if (x.catalogName === l.old) x.catalogName = l.next; }); return; }
       if (['catcats','catattrs','catdesc'].includes(l._f)){ const k = S.catalogs.find(c => c.code === l._code); if (!k) return;
         if (l._f === 'catdesc') k.desc = l.next === '—' ? '' : l.next;
         if (l._f === 'catattrs') k.attrs = [...l._v];
@@ -13786,9 +13786,21 @@ const bkExOk = B => B.ex.length > 0 && B.ex.every(x => !bkExErr(B, x));
 const bkRowsOk = B => B.mode === 'existing' ? bkExOk(B) : bkFileOk(B);
 /* approved SKUs that fit the chosen product, channel / type and country */
 const bkCharge = s => s.access || (['Consumable','Usage'].includes(s.type) ? 'metered' : s.type === 'Feature' ? 'onoff' : '');   // how a SaaS SKU is charged
-const bkExPool = B => S.skus.filter(s => !s.legacy && s.product === B.prod && s.status === 'Active' && (B.prod !== 'clarity' || (['onoff','metered','both'].includes(B.access) ? s.type === 'Feature' && (B.access === 'both' ? ['onoff','metered'].includes(bkCharge(s)) : bkCharge(s) === B.access) : B.anyType || (bkFeat(B) ? s.type === 'Feature' : s.type !== 'Feature'))));   // SaaS catalogs: features charged the catalog's way (Both = on/off and usage)   // any channel or country
+const bkExPool0 = B => S.skus.filter(s => !s.legacy && s.product === B.prod && s.status === 'Active' && (B.prod !== 'clarity' || (['onoff','metered','both'].includes(B.access) ? s.type === 'Feature' && (B.access === 'both' ? ['onoff','metered'].includes(bkCharge(s)) : bkCharge(s) === B.access) : B.anyType || (bkFeat(B) ? s.type === 'Feature' : s.type !== 'Feature'))));   // SaaS catalogs: features charged the catalog's way (Both = on/off and usage)   // any channel or country
 /* what a SKU is, for tax: each category carries its tax code (SAC for services, HSN for goods). Sample codes, to be confirmed by the tax team */
 /* a category belongs to one country and carries that country's tax code: SAC or HSN in India, VAT in the UAE, GST in Singapore. Sample mappings, for Finance to confirm */
+/* default catalogs: their SKU list is the product features Plans lists for them */
+const DEF_CAT_FEATS = {"Data & Intelligence": ["ingest-sdk", "ingest-files", "segment-projects", "funnel", "scv-basic", "ingest-api", "segment-portfolio", "event-analytics", "cql", "journeys", "scv-advanced"], "Communicate": ["campaign-schedule", "workflow-builder", "campaign-single", "campaign-mco", "campaign-files", "ai-optimiser", "events-triggers", "workflow-ab", "workflow-api", "campaign-ab", "campaign-segments", "analyse-dashboard", "analyse-reports", "content-studio"], "Touchpoints": ["shortlinks", "qr-custom", "smart-redirect"]};
+const defCatCodes = name => DEF_CAT_FEATS[name] ? new Set(DEF_CAT_FEATS[name].map(k => 'FT-' + k.toUpperCase() + '-IN')) : null;
+const bkExPool = B => { const L = defCatCodes(B.fixed); if (L) return S.skus.filter(s => L.has(s.code) && s.status === 'Active');   // in a default catalog: only its own features
+  const c = B.fixed && catByName(B.fixed); if (c && c.ch) return bkExPool0(B).filter(s => s.catalogue === c.name || cmChan(s) === c.name);   // SMS, RCS, WhatsApp: only that channel's SKUs
+  return bkExPool0(B); };
+function defCatSync(){ skuCatalogs(); ftList();
+  const saas = (bkCats().find(k => k.cty === 'IN' && k.kind === 'saas') || {}).name;
+  Object.keys(DEF_CAT_FEATS).forEach(name => { const c = catByName(name); if (!c) return; const L = defCatCodes(name);
+    Object.assign(c, {prod:'clarity', access:'onoff', chans:[]});   // a SaaS catalog has no channels if (saas && !c.categories.includes(saas)) c.categories.unshift(saas);
+    S.skus.filter(s => s.catalogName === name && !L.has(s.code)).forEach(s => Object.assign(s, {catalogName:null, catalogCategory:null, unassigned:true}));   // what isn't a Plans feature of this catalog moves out: unassigned, still in All SKUs
+    S.skus.filter(s => L.has(s.code)).forEach(s => Object.assign(s, {catalogName:name, catalogCategory:saas || s.catalogCategory, unassigned:false})); }); }
 const BK_CATEGORIES = [['TEL-MSG-IN','Telecom messaging and voice','IN','SAC','998413','messaging'], ['OTT-MSG-IN','OTT and email messaging','IN','SAC','998319','messaging'],
   ['SAAS-IN','SaaS subscription','IN','SAC','998314','saas'], ['PRO-SVC-IN','Professional services','IN','SAC','998313','services'],
   ['MSG-AE','Messaging services','AE','VAT','STD','messaging'], ['SAAS-AE','SaaS subscription','AE','VAT','STD','saas'], ['PRO-SVC-AE','Professional services','AE','VAT','STD','services'],
@@ -14011,7 +14023,7 @@ const BK_CHANS = [['sms','SMS'], ['whatsapp','WhatsApp'], ['rcs','RCS'], ['voice
 const BK_ACCESS = [['onoff','On/off','Customers either have a feature or they don’t. No usage is counted.'], ['metered','Charged by usage','Customers pay for how much they use, such as per profile or per API call.'], ['both','Both','You choose for each SKU: turned on or off, or charged by usage.']];
 function bkTaxSection(B, e, err, chkGrp){
   const types = [['messaging','Messaging'], ['clarity','SaaS'], ['svc','Services']], kind = BK_KIND[B.prod];
-  const typeF = `<div class="field full"><span class="lbl" id="bk-l-prod">Type of catalog</span><div class="seg2${e.prod ? ' bad' : ''}" role="radiogroup" aria-labelledby="bk-l-prod" id="bk-prod">${types.map(([v, l]) => `<button type="button" role="radio" aria-checked="${B.prod === v}" class="${B.prod === v ? 'on' : ''}" data-act="bk-type-pick" data-v="${v}">${l}</button>`).join('')}</div>${B.prod ? '' : '<span class="hint">Choose a type to continue.</span>'}${err('prod')}</div>`;
+  const typeF = `<div class="field full"><span class="lbl" id="bk-l-prod">Type of catalog</span><div class="seg2${e.prod ? ' bad' : ''}" role="radiogroup" aria-labelledby="bk-l-prod" id="bk-prod">${types.map(([v, l]) => `<button type="button" role="radio" aria-checked="${B.prod === v}" class="${B.prod === v ? 'on' : ''}" data-act="bk-type-pick" data-v="${v}" ${B.revise ? 'disabled data-tip="A catalog’s type can’t be changed."' : ''}>${l}</button>`).join('')}</div>${B.prod ? '' : '<span class="hint">Choose a type to continue.</span>'}${err('prod')}</div>`;
   const sub = B.prod === 'messaging'
     ? `<div class="full">${chkGrp('chans', 'Allowed channels', BK_CHANS, 'SKUs in this catalog can only be for these channels.', '', 'Select channels', 'channel')}</div>`
     : B.prod === 'clarity'
@@ -14144,6 +14156,9 @@ function bkpPaint(keepScroll){
   const B = S.bk, P = S.bkPick, box = $('#bkp-list'); if (!B || !P || !box) return;
   const feat = bkFeat(B), noun = feat ? 'feature' : 'SKU', pool = bkExPool(B), L = bkpShown(), vis = L.slice(0, P.max), nSel = L.filter(s => P.sel.has(s.code)).length, top = box.querySelector('.bkp-rows')?.scrollTop || 0;
   const filtered = P.q || P.cty.length || P.ch.length || P.only;
+  if (B.fixed && !filtered && (!pool.length || pool.every(s => s.catalogName === B.cat))){
+    box.innerHTML = `<div class="bkp-none"><span class="b3">No ${noun}s related to this catalog</span><span class="b4">${pool.length ? `Every ${noun} related to ${esc(B.cat)} is already in it.` : `There are no approved ${noun}s related to ${esc(B.cat)} yet.`}</span></div>`;
+    bkpFoot(); const sm = $('#bkp-sum'); if (sm) sm.textContent = ''; return; }
   box.innerHTML = `<div class="bkp-h"><label class="bkp-all"><input type="checkbox" id="bkp-all" data-chg="bkpall" ${L.length && nSel === L.length ? 'checked' : ''} ${L.length ? '' : 'disabled'}><span>${filtered ? `Select all ${L.length} shown` : `Select all ${L.length}`}</span></label><span class="spacer"></span>
       <button class="btn-link sm" data-act="bkp-only" aria-pressed="${P.only}" ${P.sel.size || P.only ? '' : 'disabled'}>${P.only ? 'Show all' : `Show selected (${P.sel.size})`}</button></div>
     ${L.length ? `<ul class="bkp-rows" aria-label="${noun}s">${vis.map(s => { const inThis = s.catalogName === B.cat;
@@ -14184,27 +14199,27 @@ const bkLocked = (B, k) => (B.fixed && ['prod','category'].includes(k)) || (B.re
 const bkTitle = B => B.fixed ? `Add SKUs to ${B.fixed}` : B.revise ? `Revise ${B.revise}` : 'Create catalog';
 function bkSubmitExisting(B){
   B.cat = String(B.cat).trim(); B.exTouched = true;
-  if (!bkDetailsOk(B) || !bkExOk(B)){ B.step = bkDetailsOk(B) ? 'upload' : 'details'; render(); return toast('Some prices need fixing before you submit.', 'err'); }
+  if (!bkDetailsOk(B) || (!B.revise && !bkExOk(B))){ B.step = bkDetailsOk(B) ? 'upload' : 'details'; render(); return toast('Some prices need fixing before you submit.', 'err'); }
   const feat = bkFeat(B), lines = [];
-  B.ex.forEach(x => { const s = sku(x.code); if (!s) return; const nv = +(+x.base).toFixed(4);
+  (B.revise ? [] : B.ex).forEach(x => { const s = sku(x.code); if (!s) return; const nv = +(+x.base).toFixed(4);
     if (!feat && nv !== s.base) lines.push({code:s.code, field:'Base rate', old:rate(s.base, s.cur), next:rate(nv, s.cur), eff:'On approval', _f:'rate', _v:nv});
     if (s.catalogName !== (B.revise || B.cat)) lines.push({code:s.code, field:'Catalog', old:s.catalogName || '—', next:B.cat, eff:'On approval', _f:'catalog', _cat: s.catalogCategory && B.cats.includes(s.catalogCategory) ? s.catalogCategory : B.category}); });
   if (B.revise){   // revising: SKUs taken out, a new name, a new category
     const keep = new Set(B.ex.map(x => x.code)), cur = catByName(B.revise);
-    S.skus.filter(x => x.catalogName === B.revise && x.status === 'Active' && !keep.has(x.code)).forEach(x => lines.push({code:x.code, field:'Catalog', old:B.revise, next:'—', eff:'On approval', _f:'catalog'}));
     if (B.cat !== B.revise) lines.unshift({code:'—', field:'Catalog name', old:B.revise, next:B.cat, eff:'On approval', _f:'catrename'});
     if (cur && B.cats.join('|') !== cur.categories.join('|')) lines.unshift({code:'—', field:'Allowed categories', old:cur.categories.join(', '), next:B.cats.join(', '), eff:'On approval', _f:'catcats', _v:[...B.cats], _code:cur.code});
     if (cur && B.attrs.join('|') !== cur.attrs.join('|')) lines.unshift({code:'—', field:'Required attributes', old:cur.attrs.map(catAttrLabel).join(', ') || 'None', next:B.attrs.map(catAttrLabel).join(', ') || 'None', eff:'On approval', _f:'catattrs', _v:[...B.attrs], _code:cur.code});
     if (cur && String(B.desc || '').trim() !== String(cur.desc || '').trim()) lines.unshift({code:'—', field:'Description', old:cur.desc || '—', next:String(B.desc || '').trim() || '—', eff:'On approval', _f:'catdesc', _code:cur.code});
+    if (cur){ if (cur.prod === 'messaging' && !(B.chans || []).length) return toast('Choose at least one channel.', 'err'); if (cur.prod === 'svc' && !(B.svcs || []).length) return toast('Choose at least one service.', 'err'); if (cur.prod === 'clarity' && !B.access) return toast('Choose how features are charged.', 'err'); lines.push(...catRevSets(B, cur)); }
     if (!lines.length){ return toast('Nothing has changed yet.', 'info'); } }
   if (!B.revise && !skuCatalogs().some(c => c.name === B.cat)) S.catalogs.push(catFill({name:B.cat, code:B.code, desc:B.desc, prod:B.prod, type:B.type, categories:[...B.cats], attrs:[...B.attrs]}));
-  const nc = lines.filter(l => l._f === 'rate').length, id = 'CR-0' + (150 + S.changeReqs.length);
+  const nc = lines.filter(l => l._f === 'rate').length, id = 'CR-0' + (Math.max(150, ...S.changeReqs.map(r => +String(r.id).replace(/\D/g, '') || 0)) + 1);
   S.changeReqs.unshift({id, title: B.revise ? `Revise catalog · ${B.revise}${B.cat !== B.revise ? ' → ' + B.cat : ''} · ${plural(lines.length, 'change')}` : `Catalog · ${B.cat} · ${plural(B.ex.length, 'existing ' + (feat ? 'feature' : 'SKU'))}${nc ? ` · ${plural(nc, 'new version')}` : ''}`, urgent:false, lines,
     reason:`Existing ${feat ? 'features' : 'SKUs'} added to a catalog · ${PROD(B.prod).name} · ${bkTypeLabel(B)} · ${ctyName(B.cty)}`, maker:meRaw().name, on:0, status:'Waiting for MD', impact:{review:0, below:0, live:0, plans:0, revenue:'—'}});
   S.notifs.unshift({to:['md'], on:0, text:`${meRaw().name} submitted ${id}: ${B.ex.length} existing SKUs for ${B.cat}.`, go:{v:'work', tab:'approvals', grp:'SKU approval'}});
   log('Submitted existing SKUs for a catalog', id, '', B.cat);
   S.skuOpen = Object.assign(S.skuOpen || {}, {[B.cat]:true});
-  if (B.modal) qmClose(); S.bk = null; toast(`${id} sent to the MD · ${plural(B.ex.length, feat ? 'feature' : 'SKU')}${nc ? `, ${plural(nc, 'new version')}` : ''}.`, 'ok'); cmBack();
+  if (B.modal) qmClose(); const wasRev = B.revise; S.bk = null; toast(wasRev ? `${id} sent for approval · ${plural(lines.length, 'change')}.` : `${id} sent to the MD · ${plural(B.ex.length, feat ? 'feature' : 'SKU')}${nc ? `, ${plural(nc, 'new version')}` : ''}.`, 'ok'); cmBack();
 }
 
 /* Admin › SKUs: the SKU Creation section, with the SKUs still in Draft or waiting for approval */
@@ -14511,7 +14526,7 @@ Object.assign(ACT, {
   'cat-archive-ok': t => { const c = catByName(t.dataset.k); if (!c) return; c.archived = true; closeOverlay(); log('Archived catalog', c.name); toast(`${c.name} archived.`, 'ok'); render(); },
   'cat-restore': t => { const c = catByName(t.dataset.k); S._catMenu = null; if (!c) return; c.archived = false; log('Restored catalog', c.name); toast(`${c.name} restored.`, 'ok'); render(); },
   'cat-revise': t => { const c = catByName(t.dataset.k); if (!c || t.getAttribute('aria-disabled') === 'true') return; S._catMenu = null;
-    const B = bkInit(); Object.assign(B, {cat:c.name, prod:c.prod, type:(bkTypes(c.prod)[0] || [''])[0], category:c.categories[0], cats:[...c.categories], code:c.code, desc:c.desc || '', attrs:[...c.attrs], revise:c.name, mode:'existing', step:'upload',
+    const B = bkInit(); Object.assign(B, {cat:c.name, prod:c.prod, type:(bkTypes(c.prod)[0] || [''])[0], category:c.categories[0], cats:[...c.categories], code:c.code, desc:c.desc || '', attrs:[...c.attrs], revise:c.name, mode:'existing', step:'upload', chans:[...(c.chans || [])], svcs:[...(c.svcs || [])], access:c.access || '',
       ex: S.skus.filter(x => x.catalogName === c.name && x.status === 'Active').map(x => ({code:x.code, base:String(x.base)})), modal:true});
     render(); qmOpen('revise'); }
 });
@@ -14679,6 +14694,7 @@ const FT_SEED = [
   ["campaign-schedule", "Campaign scheduling + failover", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["workflow-builder", "Workflow Builder", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["ai-optimiser", "AI Optimiser (WHEN + WHERE)", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["events-triggers", "Events and Triggers", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["workflow-ab", "Workflow - AB Test Node", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["workflow-api", "Workflow - API Node", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["campaign-ab", "Campaigns - AB Test", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
@@ -14719,13 +14735,13 @@ function ftList(){
 const ftNew = () => ftList().filter(f => !f.cfgs.length).length;
 function cmFeatsView(){
   const L0 = ftList(), mk = can.sku(); if (!S.ftL) S.ftL = {q:'', st:[]};
-  const f = S.ftL, q = f.q.trim().toLowerCase(), stOf = x => x.cfgs.length ? 'configured' : 'new';
-  const L = L0.filter(x => (!q || `${x.key} ${x.name} ${x.desc}`.toLowerCase().includes(q)) && (!f.st.length || f.st.includes(stOf(x))));
+  const f = S.ftL, q = f.q.trim().toLowerCase(), stOf = x => x.cfgs.length ? [...new Set(x.cfgs.map(g => g.status))] : ['Unconfigured'], ST_ORDER = ['Active','Pending approval','Draft','Sent back','Inactive','Rejected','Unconfigured'];
+  const L = L0.filter(x => (!q || `${x.key} ${x.name} ${x.desc}`.toLowerCase().includes(q)) && (!f.st.length || stOf(x).some(v => f.st.includes(v))));
   const head = `<div class="ctl-head"><div class="ctl-hl"><div class="ctl-t"><h1 class="sk2-h">SaaS features</h1><span class="ctl-code lg">${L0.length}</span></div>
       <p class="ctl-desc">Features come from the backend. Configure each one to set its price and tax and make it available to sell.</p></div>
       <div class="ctl-acts"><button class="btn btn-sec" data-act="ft-sync">${I('refresh',16)}Simulate backend sync</button></div></div>`;
   const tools = `<div class="ctl-tools"><label class="search">${I('search',16)}<input type="search" id="ft-q" value="${esc(f.q)}" placeholder="Search features" aria-label="Search features" autocomplete="off"></label>
-      ${cmMsel('ft-f', 'st', 'All features', 'statuses', [['new', 'Unconfigured'], ['configured', 'Configured']], f.st)}</div>`;
+      ${cmMsel('ft-f', 'st', 'All features', 'statuses', [...new Set(L0.flatMap(stOf))].sort((a, b) => (ST_ORDER.indexOf(a) + 99) % 99 - (ST_ORDER.indexOf(b) + 99) % 99).map(v => [v, v]), f.st)}</div>`;
   const left = x => CAT_CTYS.filter(c => !x.cfgs.some(g => g.cty === c[0])).length;
   const rows = L.map(x => `<tr><td class="ft-f"><div class="sk2-n">${esc(x.name)} <span class="ft-key">${esc(x.key)}</span>${x.fresh && !x.cfgs.length ? ' <span class="ft-newb">New</span>' : ''}</div><div class="ft-desc">${esc(x.desc)}</div></td>
       <td class="ft-cfg">${x.cfgs.length ? x.cfgs.map(g => `<div class="ft-cl"><button type="button" class="ft-code" data-act="sku-open" data-id="${esc(ftCode(x, g.cty))}">${esc(ftCode(x, g.cty))}</button></div>`).join('') : '<div class="ft-cl"><span class="b4">Not configured yet</span></div>'}</td>
@@ -15497,13 +15513,11 @@ function qmPaint(){
       const inDeals = catDeals(B.revise);
       const G = S._bkChk;
       body.innerHTML = `<div class="fgrid qm-rev"><div class="field"><label for="bk-code">Catalog code</label><input class="inp num bk-code" id="bk-code" value="${esc(B.code)}" readonly aria-describedby="bk-code-h"><span class="hint" id="bk-code-h">Can’t be changed.</span></div>
-          <div class="field"><label for="bk-cat">Name</label><input class="inp${B.errs.cat ? ' bad' : ''}" id="bk-cat" data-inp="bk" data-k="cat" maxlength="60" value="${esc(B.cat)}" autocomplete="off">${err('cat')}</div>
+          <div class="field"><label for="bk-cat">Catalog name</label><input class="inp${B.errs.cat ? ' bad' : ''}" id="bk-cat" data-inp="bk" data-k="cat" maxlength="60" value="${esc(B.cat)}" autocomplete="off">${err('cat')}</div>
           <div class="field full"><label for="bk-desc">Description${OPT}</label><textarea class="inp" id="bk-desc" data-inp="bk" data-k="desc" rows="2" maxlength="300">${esc(B.desc || '')}</textarea></div>
-          <div class="full">${G('cats', 'Allowed categories', bkCats().map(c => [c.name, c.name]), 'A SKU picks one of these. Its category sets the tax code.', 'bk-addcat', 'Select categories', 'category')}</div>
-          <div class="full">${G('attrs', 'Required SKU attributes', CAT_ATTRS, 'Every SKU in this catalog must fill these before it can be activated.', '', 'Select attributes', 'attribute')}</div></div>
-        ${P.upload || ''}`;
+          ${bkTaxSection(B, B.errs, err, G)}</div>`;
       const changes = bkReviseChanges(B);
-      foot.innerHTML = `<span class="b4 qm-sum">${changes ? plural(changes, 'change') : 'No changes yet'}</span><span class="spacer"></span><button class="btn btn-ghost" data-act="close">Cancel</button><button class="btn btn-pri" data-act="bk-submit" ${changes && bkDetailsOk(B) && bkExOk(B) ? '' : 'disabled'}>${I('send',16)}Submit for approval</button>`;
+      foot.innerHTML = `<span class="b4 qm-sum">${changes ? plural(changes, 'change') : 'No changes yet'}</span><span class="spacer"></span><button class="btn btn-ghost" data-act="close">Cancel</button><button class="btn btn-pri" data-act="bk-submit" ${changes && bkDetailsOk(B) ? '' : 'disabled'}>${I('send',16)}Submit for approval</button>`;
     } }
   const dr = d.querySelector('.dr-b'); if (dr) dr.scrollTop = top;
   if (aid){ const n = document.getElementById(aid); if (n && n !== document.activeElement){ n.focus({preventScroll:true}); try { if (sel != null) n.setSelectionRange(sel, sel); } catch {} } }
@@ -15511,10 +15525,14 @@ function qmPaint(){
 /* how many changes a revision would send: renamed, new category, prices, SKUs added or removed */
 function bkReviseChanges(B){ const cur = catByName(B.revise); if (!cur) return 0; let n = 0;
   if (String(B.cat).trim() !== B.revise) n++; if (B.cats.join('|') !== cur.categories.join('|')) n++; if (B.attrs.join('|') !== cur.attrs.join('|')) n++; if (String(B.desc || '').trim() !== String(cur.desc || '').trim()) n++;
-  const now = new Set(S.skus.filter(x => x.catalogName === B.revise && x.status === 'Active').map(x => x.code)), sel = new Set(B.ex.map(x => x.code));
-  B.ex.forEach(x => { const s = sku(x.code); if (!s) return; if (!now.has(x.code)) n++; if (!bkFeat(B) && String(x.base).trim() && +x.base !== s.base) n++; });
-  now.forEach(c => { if (!sel.has(c)) n++; });
+  catRevSets(B, cur).forEach(() => n++);
   return n; }
+/* the type's own setting, changed in a revision: Allowed channels (Messaging), How are features charged? (SaaS), Allowed services (Services) */
+function catRevSets(B, cur){ const L = [], j = a => (a || []).join('|'), chan = v => (BK_CHANS.find(x => x[0] === v) || [, v])[1], acc = v => (BK_ACCESS.find(x => x[0] === v) || [, v || '—'])[1];
+  if (cur.prod === 'messaging' && j(B.chans) !== j(cur.chans)) L.push({code:'—', field:'Allowed channels', old:(cur.chans || []).map(chan).join(', ') || 'None', next:(B.chans || []).map(chan).join(', ') || 'None', eff:'On approval', _f:'catset', _key:'chans', _v:[...(B.chans || [])], _code:cur.code});
+  if (cur.prod === 'clarity' && (B.access || '') !== (cur.access || '')) L.push({code:'—', field:'How features are charged', old:acc(cur.access), next:acc(B.access), eff:'On approval', _f:'catset', _key:'access', _v:B.access, _code:cur.code});
+  if (cur.prod === 'svc' && j(B.svcs) !== j(cur.svcs)) L.push({code:'—', field:'Allowed services', old:(cur.svcs || []).join(', ') || 'None', next:(B.svcs || []).join(', ') || 'None', eff:'On approval', _f:'catset', _key:'svcs', _v:[...(B.svcs || [])], _code:cur.code});
+  return L; }
 { const _r = render; render = function(){ const out = _r.apply(this, arguments); if (S._qm) qmPaint(); return out; }; }
 { const a = INP.bk, b = INP.bkex; INP.bk = t => { a(t); if (S._qm === 'revise') qmPaint(); }; INP.bkex = t => { b(t); if (S._qm === 'revise') qmPaint(); }; }   // keep the change count live
 
@@ -20864,6 +20882,7 @@ function apExtraWork(items){
    BOOT
    ===================================================================== */
 h2Seed();
+defCatSync();
 trialDocApi.resume();
 entApi.restore();
 if (!PERSONA_SWITCH.includes(S.user)) S.user = 'meera';
