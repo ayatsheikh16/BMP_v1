@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/", "destination": "/Helo%20BMP%20-%20merged%20prototype.html" }
+  ]
+}
