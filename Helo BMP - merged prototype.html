@@ -20899,6 +20899,39 @@ function apExtraWork(items){
   return items.sort(by(i => i.wait, 1));
 }
 
+/* ---------- overlays opened inside an embedded page dim the whole portal ----------
+   Accounts, Actions, Plans and Add-on packs run in frames, so their scrim only covers the frame. While one is open,
+   the same scrim covers the rest of the portal (sidebar and top bar); a click on it closes the overlay like the
+   page's own scrim. The frame itself is cut out, so its own scrim and dialog stay as they are. */
+(() => {
+  const shade = document.createElement('div');
+  shade.id = 'frame-scrim'; shade.hidden = true;
+  shade.style.cssText = 'position:fixed;inset:0;z-index:1000;background:var(--scrim)';
+  document.body.appendChild(shade);
+  let open = null;   // {frame, scrim} while an embedded overlay is open
+  const sync = () => {
+    open = null;
+    for (const f of document.querySelectorAll('#acframe, iframe.pkf')){
+      if (f.hidden || !f.offsetParent) continue;
+      let s = null; try { s = f.contentDocument && f.contentDocument.querySelector('.scrim'); } catch (e) {}
+      if (s){ open = {frame:f, scrim:s}; break; }
+    }
+    if (shade.hidden !== !open) shade.hidden = !open;   // written only on change, so the watchers below don't loop
+    if (!open) return;
+    const r = open.frame.getBoundingClientRect(), [L, T, R, B] = [r.left, r.top, r.right, r.bottom].map(n => Math.round(n) + 'px');
+    const clip = `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${L} ${T}, ${R} ${T}, ${R} ${B}, ${L} ${B}, ${L} ${T})`;
+    if (shade.dataset.clip !== clip){ shade.dataset.clip = clip; shade.style.clipPath = clip; }
+  };
+  shade.addEventListener('click', () => { if (open) open.scrim.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true})); sync(); });
+  /* each frame is watched from the moment it loads; Plans and Add-on packs make a new frame per visit */
+  document.addEventListener('load', e => { const f = e.target;
+    if (!(f instanceof HTMLIFrameElement) || !f.matches('#acframe, iframe.pkf')) return;
+    try { new MutationObserver(sync).observe(f.contentDocument.body, {childList:true, subtree:true}); } catch (e) {}
+    sync(); }, true);
+  window.addEventListener('resize', sync);
+  new MutationObserver(recs => { if (recs.some(r => r.target !== shade)) sync(); }).observe(document.body, {attributes:true, attributeFilter:['hidden', 'style', 'class'], subtree:true, childList:true});
+})();
+
 /* =====================================================================
    BOOT
    ===================================================================== */
