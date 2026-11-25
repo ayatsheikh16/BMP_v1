@@ -353,6 +353,8 @@ patch_any(' : `<button class="btn btn-sec" style="height:40px" data-act="sku-as-
 
 # plans and add-on packs (embedded page): the approver comes from Approval configuration › Revise plan
 patchA('decl:pkDoc', "(T() === 'md')", "apPlanMine()")
+# its toasts sit top right like the portal's (the page's own are bottom centre)
+patchA('decl:PK_CSS', ".rail,.split .rail{top:16px!important}</style>';", ".rail,.split .rail{top:16px!important}.toast{left:auto!important;right:calc(16px + env(safe-area-inset-right,0px))!important;top:calc(12px + env(safe-area-inset-top,0px))!important;bottom:auto!important;transform:none!important}</style>';")
 patchA('decl:pkFrame', "if (!can.sku() && T() !== 'md') return noAccess(label);", "if (!can.sku() && T() !== 'md' && !apPlanMine()) return noAccess(label);")
 # account creation journey · setup summary: approval status of the plan
 patch_any("""        planSt = ['Sent back', 'Approved'].includes(od.stage) ? 'action' : 'pending';
