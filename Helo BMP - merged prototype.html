@@ -5441,6 +5441,9 @@ body[data-focus] #gsearch,body[data-focus] #bell{display:none}
 :where(html[data-src="b"]) .a6-rlr .a5-num input{width:100%;min-width:0}
 :where(html[data-src="b"]) .ds-g{margin-top:6px;border-top:1px solid var(--border-subtle);padding-top:14px}
 :where(html[data-src="b"]) .ds-l > .ds-g:first-child{margin-top:0;border-top:0;padding-top:8px}
+/* merged: a table's hidden label (.sr) stays inside its scroll box, so a wide table never scrolls the whole page */
+.sk2-card > .tblscroll{position:relative}
+
 </style>
 
 <div class="shell">
@@ -14638,35 +14641,35 @@ const FT_ACCESS = [['onoff','Turned on or off'], ['metered','Charged by usage']]
 const FT_UNITS = [['seat','Per seat'], ['workspace','Per workspace'], ['profile','Per profile'], ['api_call','Per API call'], ['execution','Per execution'], ['1K tokens','Per 1K tokens'], ['workflow','Per workflow']];
 const FT_BILL = [['Monthly','Monthly'], ['Yearly','Yearly']];
 const FT_SEED = [
-  ["data-ingestion-sdk-and-pixel", "Data ingestion (SDK and pixel)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["data-ingestion-crm", "Data ingestion (CRM)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["data-ingestion-files", "Data ingestion (Files)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["data-ingestion-apis", "Data ingestion (APIs)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["segment-builder-re-targeting-portfolio", "Segment Builder + Re-targeting (Portfolio)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["segment-builder-re-targeting-projects", "Segment Builder + Re-targeting (Projects)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["funnel-analytics-re-targeting", "Funnel analytics + Re-targeting", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["event-analytics-mixpanel-amplitude-grade-re-targeting", "Event Analytics (Mixpanel/Amplitude Grade) + Re-targeting", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["cql-clarity-query-language", "CQL \u2014 Clarity Query Language", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["journeys-sankey", "Journeys (Sankey)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["scv-basic-events", "SCV (Basic + Events)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["ingest-sdk", "Data ingestion (SDK and pixel)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["ingest-crm", "Data ingestion (CRM)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["ingest-files", "Data ingestion (Files)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["ingest-api", "Data ingestion (APIs)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["segment-portfolio", "Segment Builder + Re-targeting (Portfolio)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["segment-projects", "Segment Builder + Re-targeting (Projects)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["funnel", "Funnel analytics + Re-targeting", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["event-analytics", "Event Analytics (Mixpanel/Amplitude Grade) + Re-targeting", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["cql", "CQL \u2014 Clarity Query Language", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["journeys", "Journeys (Sankey)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["scv-basic", "SCV (Basic + Events)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["scv-advanced", "SCV (Advanced)", "On/off feature \u00b7 Data and segments", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["campaign-scheduling-failover", "Campaign scheduling + failover", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["campaign-schedule", "Campaign scheduling + failover", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["workflow-builder", "Workflow Builder", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["ai-optimiser-when-where", "AI Optimiser (WHEN + WHERE)", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["workflow-ab-test-node", "Workflow - AB Test Node", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["workflow-api-node", "Workflow - API Node", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["campaigns-ab-test", "Campaigns - AB Test", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["campaigns-single-channel", "Campaigns - Single Channel", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["campaigns-mco", "Campaigns - MCO", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["campaigns-via-files", "Campaigns via Files", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["campaigns-via-segments", "Campaigns via Segments", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["qr-code-customisation", "QR Code Customisation", "On/off feature \u00b7 Links and QR codes", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["smart-redirections-conditional-landing", "Smart Redirections (conditional landing)", "On/off feature \u00b7 Links and QR codes", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["shortlinks-and-qr-codes", "Shortlinks & QR Codes", "On/off feature \u00b7 Links and QR codes", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["ai-optimiser", "AI Optimiser (WHEN + WHERE)", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["workflow-ab", "Workflow - AB Test Node", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["workflow-api", "Workflow - API Node", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["campaign-ab", "Campaigns - AB Test", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["campaign-single", "Campaigns - Single Channel", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["campaign-mco", "Campaigns - MCO", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["campaign-files", "Campaigns via Files", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["campaign-segments", "Campaigns via Segments", "On/off feature \u00b7 Campaigns and workflows", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["qr-custom", "QR Code Customisation", "On/off feature \u00b7 Links and QR codes", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["smart-redirect", "Smart Redirections (conditional landing)", "On/off feature \u00b7 Links and QR codes", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
+  ["shortlinks", "Shortlinks & QR Codes", "On/off feature \u00b7 Links and QR codes", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["content-studio", "Content Studio", "On/off feature \u00b7 Content and analytics", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["analyse-dashboard", "Analyse - Dashboard", "On/off feature \u00b7 Content and analytics", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
   ["analyse-reports", "Analyse - Reports", "On/off feature \u00b7 Content and analytics", [['IN', 'onoff', 0, '', 'Monthly', 'Active']]],
-  ["monthly-tracked-profiles", "Monthly Tracked Profiles", 'Charged by usage · Core feature in Plans', [['IN', 'metered', 0.12, "profile", 'Monthly', 'Active']]],
+  ["mtp", "Monthly Tracked Profiles", 'Charged by usage · Core feature in Plans', [['IN', 'metered', 0.12, "profile", 'Monthly', 'Active']]],
   ["executions", "Executions", 'Charged by usage · Core feature in Plans', [['IN', 'metered', 0.015, "execution", 'Monthly', 'Active']]],
   ["ai-tokens", "AI Tokens", 'Charged by usage · Core feature in Plans', [['IN', 'metered', 0.4, "1K tokens", 'Monthly', 'Active']]],
   ["workflows", "Workflows", 'Charged by usage · Core feature in Plans', [['IN', 'metered', 1500, "workflow", 'Monthly', 'Active']]],
@@ -14704,7 +14707,7 @@ function cmFeatsView(){
   const rows = L.map(x => `<tr><td class="ft-f"><div class="sk2-n">${esc(x.name)} <span class="ft-key">${esc(x.key)}</span>${x.fresh && !x.cfgs.length ? ' <span class="ft-newb">New</span>' : ''}</div><div class="ft-desc">${esc(x.desc)}</div></td>
       <td class="ft-cfg">${x.cfgs.length ? x.cfgs.map(g => `<div class="ft-cl"><button type="button" class="ft-code" data-act="sku-open" data-id="${esc(ftCode(x, g.cty))}">${esc(ftCode(x, g.cty))}</button></div>`).join('') : '<div class="ft-cl"><span class="b4">Not configured yet</span></div>'}</td>
       <td class="ft-stc">${x.cfgs.length ? x.cfgs.map(g => `<div class="ft-cl"><span class="sk2-st t-${CM_TONE[g.status] || 'neu'}"><i></i>${esc(g.status)}</span></div>`).join('') : `<div class="ft-cl"><span class="sk2-st t-warn"><i></i>Unconfigured</span></div>`}</td>
-      <td class="r ft-act">${mk ? (x.cfgs.length ? (left(x) ? `<button class="btn btn-sec sm" data-act="ft-cfg" data-k="${esc(x.key)}">Add country</button>` : '') : `<button class="btn btn-pri sm" data-act="ft-cfg" data-k="${esc(x.key)}">Configure</button>`) : ''}</td></tr>`).join('');
+      <td class="r ft-act">${mk ? (x.cfgs.length ? (left(x) ? `<button class="btn btn-sec sm" data-act="ft-cfg" data-k="${esc(x.key)}">Edit</button>` : '') : `<button class="btn btn-pri sm" data-act="ft-cfg" data-k="${esc(x.key)}">Configure</button>`) : ''}</td></tr>`).join('');
   const body = `${tools}${L.length ? `<div class="tblscroll"><table class="sk2-tbl ctl-tbl ft-tbl"><thead><tr><th>Feature</th><th>SKU code</th><th>Status</th><th><span class="sr">Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>`
     : `<div class="ctl-empty"><span class="ctl-empty-ic">${I('search',28)}</span><h3 class="ctl-empty-t">No features match</h3><p class="ctl-empty-s">Try another search or filter.</p></div>`}`;
   return {crumbs:[['Catalogs', {v:'skus'}], ['SaaS features']], head: cmShell('feats', head + `<div class="ctl-pad"><div class="sk2-card">${body}</div></div>`), body:'',

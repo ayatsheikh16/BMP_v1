@@ -166,7 +166,16 @@ ONOFF_FEATS = [('Data and segments', ['Data ingestion (SDK and pixel)', 'Data in
     'Campaigns - AB Test', 'Campaigns - Single Channel', 'Campaigns - MCO', 'Campaigns via Files', 'Campaigns via Segments']),
   ('Links and QR codes', ['QR Code Customisation', 'Smart Redirections (conditional landing)', 'Shortlinks & QR Codes']),
   ('Content and analytics', ['Content Studio', 'Analyse - Dashboard', 'Analyse - Reports'])]
-def _fkey(n): return re.sub(r'-+', '-', re.sub(r'[^a-z0-9]+', '-', n.lower().replace('&', 'and').replace('+', ' '))).strip('-')
+FEAT_KEYS = {   # short keys, like the designer's ('sso', 'custom-domains'): the SKU code is FT-<KEY>-<COUNTRY>
+  'Data ingestion (SDK and pixel)':'ingest-sdk', 'Data ingestion (CRM)':'ingest-crm', 'Data ingestion (Files)':'ingest-files', 'Data ingestion (APIs)':'ingest-api',
+  'Segment Builder + Re-targeting (Portfolio)':'segment-portfolio', 'Segment Builder + Re-targeting (Projects)':'segment-projects', 'Funnel analytics + Re-targeting':'funnel',
+  'Event Analytics (Mixpanel/Amplitude Grade) + Re-targeting':'event-analytics', 'CQL — Clarity Query Language':'cql', 'Journeys (Sankey)':'journeys',
+  'SCV (Basic + Events)':'scv-basic', 'SCV (Advanced)':'scv-advanced', 'Campaign scheduling + failover':'campaign-schedule', 'Workflow Builder':'workflow-builder',
+  'AI Optimiser (WHEN + WHERE)':'ai-optimiser', 'Workflow - AB Test Node':'workflow-ab', 'Workflow - API Node':'workflow-api', 'Campaigns - AB Test':'campaign-ab',
+  'Campaigns - Single Channel':'campaign-single', 'Campaigns - MCO':'campaign-mco', 'Campaigns via Files':'campaign-files', 'Campaigns via Segments':'campaign-segments',
+  'QR Code Customisation':'qr-custom', 'Smart Redirections (conditional landing)':'smart-redirect', 'Shortlinks & QR Codes':'shortlinks',
+  'Content Studio':'content-studio', 'Analyse - Dashboard':'analyse-dashboard', 'Analyse - Reports':'analyse-reports'}
+def _fkey(n): return FEAT_KEYS[n]
 _rows = ',\n'.join(f"  [{json.dumps(_fkey(n))}, {json.dumps(n)}, {json.dumps('On/off feature · ' + g)}, [['IN', 'onoff', 0, '', 'Monthly', 'Active']]]" for g, L in ONOFF_FEATS for n in L)
 patchA('decl:FT_SEED', "  ['sso', 'Single sign-on', 'SAML and OIDC sign-in for workspaces.', [['IN', 'onoff', 2500, '', 'Monthly', 'Active']]],\n", _rows + ',\n')
 patchA('decl:FT_SEED', "  ['custom-domains', 'Custom domains', 'Branded short links on the customer’s own domain.', [['IN', 'onoff', 1500, '', 'Monthly', 'Active']]],\n", '')
@@ -174,7 +183,7 @@ assert len(set(_fkey(n) for g, L in ONOFF_FEATS for n in L)) == 28
 
 # SaaS charged-by-usage features = the Core features of Plans › Modify plan (Helo Clarity): its usage rates and seats,
 # priced at the catalogue base rates, so they're what a "Charged by usage" SaaS catalog can pick
-USAGE_FEATS = [('monthly-tracked-profiles', 'Monthly Tracked Profiles', 'profile', 0.12), ('executions', 'Executions', 'execution', 0.015),
+USAGE_FEATS = [('mtp', 'Monthly Tracked Profiles', 'profile', 0.12), ('executions', 'Executions', 'execution', 0.015),
   ('ai-tokens', 'AI Tokens', '1K tokens', 0.4), ('workflows', 'Workflows', 'workflow', 1500), ('seats', 'Seats', 'seat', 2500)]
 _urows = ''.join(f"  [{json.dumps(k)}, {json.dumps(n)}, 'Charged by usage · Core feature in Plans', [['IN', 'metered', {p}, {json.dumps(u)}, 'Monthly', 'Active']]],\n" for k, n, u, p in USAGE_FEATS)
 patchA('decl:FT_SEED', "  ['api-access', 'API access', 'Programmatic access to messaging and reporting.', [['IN', 'metered', 0.05, 'api_call', 'Monthly', 'Active']]],\n", _urows)
@@ -207,6 +216,9 @@ patch_any('${mk ? `<button class="btn btn-sec sm" data-act="cat-tax" data-i="${i
           '${mk ? `<button class="btn btn-sec sm" data-act="cat-tax" data-i="${i}" ${c.pending ? `aria-disabled="true" data-tip="Waiting for approval in ${esc(c.pending)}."` : \'\'}>Edit tax code</button>` : \'\'}')
 
 patch_any("'cat-tax': t => { const c = bkCats()[+t.dataset.i]; if (!c) return;", "'cat-tax': t => { if (t.getAttribute && t.getAttribute('aria-disabled') === 'true') return; const c = bkCats()[+t.dataset.i]; if (!c) return;")
+
+# SaaS features page: a configured feature's action reads "Edit" (was "Add country")
+patch_any('data-act="ft-cfg" data-k="${esc(x.key)}">Add country</button>', 'data-act="ft-cfg" data-k="${esc(x.key)}">Edit</button>')
 
 # plans and add-on packs (embedded page): the approver comes from Approval configuration › Revise plan
 patchA('decl:pkDoc', "(T() === 'md')", "apPlanMine()")
@@ -264,6 +276,7 @@ ZOOM_JS = """/* File 2 drew the portal at 90% browser zoom. The merged portal us
 
 b_shell = must_replace(b_shell, '<main id="view"></main>', '<main id="view"></main>\n    <iframe id="acframe" title="Accounts and Actions" hidden style="width:100%;height:calc(100vh - 60px);border:0;vertical-align:top;background:var(--canvas)"></iframe>')
 css = cssmerge.merge_text(a_css, b_css)
+css += '\n/* merged: a table\'s hidden label (.sr) stays inside its scroll box, so a wide table never scrolls the whole page */\n.sk2-card > .tblscroll{position:relative}\n'
 css = css.replace('--zvh:calc(1vh / .9);--zvw:calc(1vw / .9)', '--zvh:1vh;--zvw:1vw')
 head_a = A_HTML[:A_HTML.index('<style>')]
 tail_a = A_HTML[A_HTML.rindex('</script>') + len('</script>'):]
