@@ -258,15 +258,17 @@ patchA('ACT:sku-rev-ok', "  if (bad) return;\n", r"""  if (bad) return;
 """)
 Akey['decl:skuRevBlock']['text'] += "\nconst skuPendingCr = s => s && s.status === 'Pending approval' ? S.changeReqs.find(c => c.status === 'Waiting for MD' && c.lines.some(l => l.code === s.code && l.field === 'New SKU')) : null;   // the request a new SKU is waiting in"
 
-# Catalogs side list: archived catalogs are kept in their own "Archived" list below the active ones (collapsed; it opens
-# by itself while an archived catalog is being viewed)
-patchA('decl:cmNav', "const L = cmShown(), item = c =>", "const all = cmShown(), L = all.filter(c => !c.archived), AR = all.filter(c => c.archived), item = c =>")
+# Catalogs side list: "All" and "Archived" tabs under the Catalogs heading (the designer's sk2-tabs); All lists the active
+# catalogs, Archived the archived ones. Archiving a catalog opens the Archived tab; restoring one goes back to All.
+patchA('decl:cmNav', "const L = cmShown(), item = c =>", "const all = cmShown(), L = all.filter(c => !c.archived), AR = all.filter(c => c.archived), tab = S._cmTab === 'archived' ? 'archived' : 'all', LT = tab === 'archived' ? AR : L, item = c =>")
 patchA('decl:cmNav', "${c.archived ? ' <span class=\"ctl-mut\">(archived)</span>' : ''}", "")
-patchA('decl:cmNav', '<div class="b4 ctl-none" hidden>No catalogs match.</div>',
-       '<div class="b4 ctl-none" hidden>No catalogs match.</div>'
-       '${AR.length ? (open => `<div class="ctl-sep" role="separator"></div><a href="#" class="ctl-item ctl-wide" data-act="cm-arch" aria-expanded="${open}"><span class="ctl-name">Archived</span><span class="ctl-n num">${AR.length}</span></a>'
-       '${open ? `<div class="ctl-list ctl-arch" aria-label="Archived catalogs">${AR.map(item).join(\'\')}</div>` : \'\'}`)(!!S._cmArch || AR.some(c => active === \'cat:\' + c.name)) : \'\'}')
-Akey['decl:cmNav']['text'] += "\nACT['cm-arch'] = () => { S._cmArch = !S._cmArch; render(); };"
+patchA('decl:cmNav', "New catalog</button>` : ''}</div>",
+       "New catalog</button>` : ''}</div>\n    <nav class=\"sk2-tabs ctl-ntabs\" role=\"tablist\" aria-label=\"Catalog status\">${[['all', 'All', L.length], ['archived', 'Archived', AR.length]].map(([k, l, n]) => `<button class=\"sk2-tab ${tab === k ? 'on' : ''}\" role=\"tab\" aria-selected=\"${tab === k}\" data-act=\"cm-ntab\" data-k=\"${k}\">${l}<span class=\"sk2-bc num\">${n}</span></button>`).join('')}</nav>")
+patchA('decl:cmNav', "${L.length > 6 ? `<label class=\"search sm ctl-ns\">", "${LT.length > 6 ? `<label class=\"search sm ctl-ns\">")
+patchA('decl:cmNav', "<div class=\"ctl-list\">${L.map(item).join('')}</div>", "<div class=\"ctl-list\">${LT.map(item).join('')}</div>${LT.length ? '' : `<div class=\"b4 ctl-none\">${tab === 'archived' ? 'No archived catalogs.' : 'No active catalogs.'}</div>`}")
+Akey['decl:cmNav']['text'] += "\nACT['cm-ntab'] = t => { S._cmTab = t.dataset.k; render(); };"
+patch_any("c.archived = true; closeOverlay();", "c.archived = true; S._cmTab = 'archived'; closeOverlay();")
+patch_any("c.archived = false; log('Restored catalog', c.name);", "c.archived = false; S._cmTab = 'all'; log('Restored catalog', c.name);")
 
 # SaaS features: the status filter lists the statuses the table shows (Active, Pending approval … Unconfigured), not Configured/Unconfigured
 patchA('decl:cmFeatsView', "stOf = x => x.cfgs.length ? 'configured' : 'new';",
@@ -338,6 +340,17 @@ patchA('decl:bkpPaint', "  const filtered = P.q || P.cty.length || P.ch.length |
     bkpFoot(); const sm = $('#bkp-sum'); if (sm) sm.textContent = ''; return; }
 """)
 
+# SKU and catalog creation belong to the Sales Manager: every Sales Manager can create (not only a granted SKU Maker),
+# the "Switch to SKU Maker to create" button is gone, and Catalogs copy names the Sales Manager
+patchA('decl:can', "  sku:           () => meRaw().perms.includes('SKU Maker'),", "  sku:           () => meRaw().perms.includes('SKU Maker') || (T() === 'sm' && !isTM()),   // Sales Managers create SKUs and catalogs")
+patchA('decl:cmShell', """${can.sku() ? '' : `<button class="btn btn-sec" data-act="sku-as-maker" title="Creating SKUs is done by the SKU Maker">${I('user',16)}Switch to SKU Maker to create</button>`}""", "")
+patch_any("'Only the SKU Maker can add SKUs. Switch to the SKU Maker to add them.'", "'Only the Sales Manager can add SKUs.'")
+patch_any('data-tip="Only the SKU Maker can create SKUs. Switch to the SKU Maker to create one."', 'data-tip="Only the Sales Manager can create SKUs."')
+patch_any("openDrawer('New change request', 'Made by the SKU Maker, approved by the MD before it takes effect',", "openDrawer('New change request', 'Made by the Sales Manager and approved before it takes effect',")
+patch_any("k === 'back' ? 'Send back to the SKU Maker' : 'Reject change request'", "k === 'back' ? 'Send back to the maker' : 'Reject change request'")
+
+patch_any(' : `<button class="btn btn-sec" style="height:40px" data-act="sku-as-maker" title="Creating SKUs is done by the SKU Maker">${I(\'user\',16)}Switch to SKU Maker to create</button>`}', ' : \'\'}')   # the older SKUs list: no "Switch to SKU Maker" button either
+
 # plans and add-on packs (embedded page): the approver comes from Approval configuration › Revise plan
 patchA('decl:pkDoc', "(T() === 'md')", "apPlanMine()")
 patchA('decl:pkFrame', "if (!can.sku() && T() !== 'md') return noAccess(label);", "if (!can.sku() && T() !== 'md' && !apPlanMine()) return noAccess(label);")
@@ -376,7 +389,16 @@ for old, new, n in [
     ("VIEWS.appr6 = function(){\n  if (!can.admin() || isTM())", "VIEWS.appr6 = function(){\n  if (!can.apprRules() || isTM())", 1)]:
     B_JS = must_replace(B_JS, old, new, n)    # the dashboard's approvals follow Approval configuration: waiting on the viewer
 import base64
-AC_JS = 'const AC_SRC = "' + base64.b64encode(open(ac_path, 'rb').read()).decode() + '";\n' + open(os.path.join(HERE, 'accounts_embed.js'), encoding='utf-8').read()
+AC_HTML = open(ac_path, encoding='utf-8').read()
+# Actions in the embedded page: SKU approval and a new "Plans & add-ons" tab always show for the MD; plan and add-on
+# rows open the portal's Plans / Add-on packs pages (the bridge in accounts_embed.js feeds the data)
+for old, new in [
+    ("...(T() === 'md' ? ['Workspace', 'Trial extension', 'Account'] : [])", "...(T() === 'md' ? ['Workspace', 'SKU approval', 'Trial extension', 'Account', 'Plans & add-ons'] : [])"),
+    ("['Account changes','Deals','Workspace','SKU approval','Trial extension','Account'].indexOf(k)", "['Account changes','Deals','Workspace','SKU approval','Trial extension','Account','Plans & add-ons'].indexOf(k)"),
+    ("function apprGroup(i){\n  const v = i.go?.v;\n", "function apprGroup(i){\n  const v = i.go?.v;\n  if (v === 'packs' || v === 'addons') return 'Plans & add-ons';\n"),
+    ("function go(v, params = {}){ S.route = Object.assign({v}, params);", "function go(v, params = {}){ if (['packs','addons','skus'].includes(v) && window.__acBridge) return window.__acBridge.go(v, params); S.route = Object.assign({v}, params);")]:
+    AC_HTML = must_replace(AC_HTML, old, new)
+AC_JS = 'const AC_SRC = "' + base64.b64encode(AC_HTML.encode('utf-8')).decode() + '";\n' + open(os.path.join(HERE, 'accounts_embed.js'), encoding='utf-8').read()
 INTEGRATE = AC_JS + '\n' + open(os.path.join(HERE, 'integrate.js'), encoding='utf-8').read()
 js = '\n'.join(c['text'] for c in A if c['text'] != '') + \
      '\n\n/* =====================================================================\n   FROM "DASHBOARD AND APPROVAL CONFIGURATION": Home 2 dashboard, approval configuration and their helpers\n   ===================================================================== */\n' + \
@@ -396,6 +418,7 @@ b_shell = must_replace(b_shell, '<main id="view"></main>', '<main id="view"></ma
 css = cssmerge.merge_text(a_css, b_css)
 css += '\n/* merged: a table\'s hidden label (.sr) stays inside its scroll box, so a wide table never scrolls the whole page */\n.sk2-card > .tblscroll{position:relative}\n'
 css += '/* merged: the sticky cell holding an open row menu sits above the next rows, so the menu is never hidden */\ntd:has(> .sk2-mw > .sk2-catm){z-index:31}\n'
+css += '/* merged: All / Archived tabs in the Catalogs side list */\n.ctl-nav .ctl-ntabs{height:40px;padding:0 4px;margin:0 0 8px;background:transparent}\n'
 css = css.replace('--zvh:calc(1vh / .9);--zvw:calc(1vw / .9)', '--zvh:1vh;--zvw:1vw')
 head_a = A_HTML[:A_HTML.index('<style>')]
 tail_a = A_HTML[A_HTML.rindex('</script>') + len('</script>'):]

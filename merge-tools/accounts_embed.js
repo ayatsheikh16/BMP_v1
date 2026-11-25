@@ -31,13 +31,32 @@ function acSync(){   // persona, theme and route of the embedded page follow the
 function acShow(params){
   const f = document.getElementById('acframe');
   $('#view').innerHTML = ''; $('#view').style.display = 'none'; f.hidden = false; f.style.display = 'block';
-  const goIn = () => { acSync(); if (params) acRun(`go(${JSON.stringify(S.route.v)}, ${JSON.stringify(params)})`); acCrumbs(); };
+  const goIn = () => { acSync(); if (params) acRun(`go(${JSON.stringify(S.route.v)}, ${JSON.stringify(params)})`); else acRun('render()'); acCrumbs(); };   // redrawn so approvals stay current
   if (!f.dataset.started){ f.dataset.started = '1';
     f.addEventListener('load', () => { f.dataset.ready = '1';
       new MutationObserver(acCrumbs).observe(f.contentDocument.getElementById('crumbs'), {childList:true, subtree:true, characterData:true});
+      acBridge();
       goIn(); renderNav(); });
     f.srcdoc = acDoc(); return; }
   if (f.dataset.ready === '1') goIn();
 }
 function acHide(){ const f = document.getElementById('acframe'); if (f){ f.hidden = true; f.style.display = 'none'; } $('#view').style.display = ''; }
 const acCount = () => { const n = acRun('myWork().length'); return n || null; };
+
+/* ---------- the embedded Actions page works on the portal's approvals ----------
+   SKU approval: the catalogue change requests are the portal's own (raised in Catalogs); their cards and the
+   approve / send back / reject buttons are the portal's, so a decision changes the real SKUs and catalogs.
+   Plans & add-ons: plan and add-on pack changes waiting for approval (from Plans and Add-on packs); a row opens
+   that page, where the approver decides. */
+try { if (!S.pkDB){ const v = localStorage.getItem('helo-addon-packs-v6'); if (v) S.pkDB = JSON.parse(v); } } catch (e) {}   // what Plans last saved
+function acBridge(){
+  const w = acWin(); if (!w) return;
+  window.__acP = {S, ACT, crCards: L => crCards(L), pkPending: () => pkPending(), planMine: () => apPlanMine(), crActs: Object.keys(ACT).filter(k => /^cr-/.test(k))};
+  w.__acBridge = {go:(v, p) => go(v, p)};
+  acRun(`(() => { const P = parent.__acP;
+    S.changeReqs = P.S.changeReqs;
+    crCards = L => P.crCards(L);
+    P.crActs.forEach(k => { ACT[k] = (t, e) => P.ACT[k](t, e); });
+    const mw = myWork; myWork = function(){ const L = mw(); try { if (P.planMine()) P.pkPending().forEach(i => L.push(Object.assign({late:false}, i))); } catch (e) {} return L.sort(by(i => i.wait, 1)); };
+    render(); })()`);
+}

@@ -28,7 +28,6 @@ const V_ALIAS = {home:'home2', appr:'appr6', appr1b:'appr6', appr2:'appr6', appr
 function go(v, params = {}){
   v = V_ALIAS[v] || v;
   if (v === 'admin' && params.tab === 'appr') v = 'appr6';
-  if (v === 'work' && params.grp === 'SKU approval') v = 'work0';   // catalogue approvals stay on the portal's own Actions list
   if (AC_VIEWS.includes(v)) S._acGo = params;                     // the embedded page opens on what was asked for
   if (!VIEWS[v] && v !== 'work0'){ toast(`This will open the ${LINK_NAME[v] || v} page once the modules are joined.`, 'info'); return; }
   S.route = Object.assign({v}, params); closeOverlay(); document.body.removeAttribute('data-nav'); render(); window.scrollTo(0,0); }
