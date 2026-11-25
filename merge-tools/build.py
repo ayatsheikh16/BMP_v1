@@ -234,6 +234,40 @@ patch_any('data-act="cat-add" data-m="existing" data-k="${esc(c.name)}" ${cm.loc
           'data-act="cat-add" data-m="existing" data-k="${esc(c.name)}">')
 patch_any("if (!c || !can.sku() || c.locked || (m === 'single' && saasNoNew(c))) return;", "if (!c || !can.sku() || (c.locked && m !== 'existing') || (m === 'single' && saasNoNew(c))) return;")
 
+# A new SKU waiting for approval can be revised: the change updates its open request (no second request), the SKU stays
+# Pending approval and the approver is told
+patchA('decl:skuRevBlock', "if (s.status !== 'Active') return", "if (s.status !== 'Active' && s.status !== 'Pending approval') return")
+patch_any("s.status === 'Active' ? `<button class=\"btn btn-pri\" data-act=\"sku-rev\"", "['Active','Pending approval'].includes(s.status) ? `<button class=\"btn btn-pri\" data-act=\"sku-rev\"")
+patchA('ACT:sku-rev', "  const dup = S.changeReqs.find(c => c.status === 'Waiting for MD' && c.lines.some(l => l.code === s.code));",
+       "  const pnew = skuPendingCr(s), dup = !pnew && S.changeReqs.find(c => c.status === 'Waiting for MD' && c.lines.some(l => l.code === s.code));")
+patchA('ACT:sku-rev', "${dup ? note('warn', `${dup.id} for this SKU is already waiting for the MD. Wait for it before revising again.`) : ''}",
+       "${dup ? note('warn', `${dup.id} for this SKU is already waiting for the MD. Wait for it before revising again.`) : pnew ? note('info', `This SKU is waiting for approval in ${pnew.id}. Your changes update that request.`) : ''}")
+patchA('ACT:sku-rev', "<div class=\"b4\">A new rate becomes v${skuVer(s) + 1} once approved. Live deals keep their rates.</div>",
+       "<div class=\"b4\">${pnew ? 'The new rate replaces the one waiting for approval.' : `A new rate becomes v${skuVer(s) + 1} once approved. Live deals keep their rates.`}</div>")
+patchA('ACT:sku-rev-ok', "  if (bad) return;\n", r"""  if (bad) return;
+  const pc = skuPendingCr(s);
+  if (pc){ const old = s.name;
+    L.forEach(l => { if (l._f === 'name') s.name = l.next; if (l._f === 'rate') s.base = l._v; if (l._f === 'desc') s.desc = l.next === '—' ? '' : l.next; });
+    pc.lines.forEach(l => { if (l.code === s.code && l.field === 'New SKU' && s.type !== 'Feature') l.next = `${rate(s.base, s.cur)} per ${s.unit}`; });
+    if (old !== s.name) pc.title = pc.title.split(old).join(s.name);
+    (pc.revs = pc.revs || []).push({by:meRaw().name, on:0, what:L.map(l => l.field).join(', '), reason:r});
+    const cur = typeof apCrCur === 'function' ? apCrCur(pc) : null;
+    (cur ? cur.names : [mdName()]).forEach(n => S.notifs.unshift({for:n, to:[], on:0, text:`${fullOf(meRaw().name)} revised ${s.code} in ${pc.id} (${L.map(l => l.field.toLowerCase()).join(', ')}). It still needs your approval.`, go:{v:'work', tab:'approvals', grp:'SKU approval'}}));
+    log('Revised SKU waiting for approval', pc.id, s.code, L.map(l => l.field).join(', '));
+    S._skr = null; closeOverlay(); toast(`${s.code} updated in ${pc.id}. It’s still waiting for approval.`, 'ok'); return render(); }
+""")
+Akey['decl:skuRevBlock']['text'] += "\nconst skuPendingCr = s => s && s.status === 'Pending approval' ? S.changeReqs.find(c => c.status === 'Waiting for MD' && c.lines.some(l => l.code === s.code && l.field === 'New SKU')) : null;   // the request a new SKU is waiting in"
+
+# Catalogs side list: archived catalogs are kept in their own "Archived" list below the active ones (collapsed; it opens
+# by itself while an archived catalog is being viewed)
+patchA('decl:cmNav', "const L = cmShown(), item = c =>", "const all = cmShown(), L = all.filter(c => !c.archived), AR = all.filter(c => c.archived), item = c =>")
+patchA('decl:cmNav', "${c.archived ? ' <span class=\"ctl-mut\">(archived)</span>' : ''}", "")
+patchA('decl:cmNav', '<div class="b4 ctl-none" hidden>No catalogs match.</div>',
+       '<div class="b4 ctl-none" hidden>No catalogs match.</div>'
+       '${AR.length ? (open => `<div class="ctl-sep" role="separator"></div><a href="#" class="ctl-item ctl-wide" data-act="cm-arch" aria-expanded="${open}"><span class="ctl-name">Archived</span><span class="ctl-n num">${AR.length}</span></a>'
+       '${open ? `<div class="ctl-list ctl-arch" aria-label="Archived catalogs">${AR.map(item).join(\'\')}</div>` : \'\'}`)(!!S._cmArch || AR.some(c => active === \'cat:\' + c.name)) : \'\'}')
+Akey['decl:cmNav']['text'] += "\nACT['cm-arch'] = () => { S._cmArch = !S._cmArch; render(); };"
+
 # plans and add-on packs (embedded page): the approver comes from Approval configuration › Revise plan
 patchA('decl:pkDoc', "(T() === 'md')", "apPlanMine()")
 patchA('decl:pkFrame', "if (!can.sku() && T() !== 'md') return noAccess(label);", "if (!can.sku() && T() !== 'md' && !apPlanMine()) return noAccess(label);")
@@ -291,6 +325,7 @@ ZOOM_JS = """/* File 2 drew the portal at 90% browser zoom. The merged portal us
 b_shell = must_replace(b_shell, '<main id="view"></main>', '<main id="view"></main>\n    <iframe id="acframe" title="Accounts and Actions" hidden style="width:100%;height:calc(100vh - 60px);border:0;vertical-align:top;background:var(--canvas)"></iframe>')
 css = cssmerge.merge_text(a_css, b_css)
 css += '\n/* merged: a table\'s hidden label (.sr) stays inside its scroll box, so a wide table never scrolls the whole page */\n.sk2-card > .tblscroll{position:relative}\n'
+css += '/* merged: the sticky cell holding an open row menu sits above the next rows, so the menu is never hidden */\ntd:has(> .sk2-mw > .sk2-catm){z-index:31}\n'
 css = css.replace('--zvh:calc(1vh / .9);--zvw:calc(1vw / .9)', '--zvh:1vh;--zvw:1vw')
 head_a = A_HTML[:A_HTML.index('<style>')]
 tail_a = A_HTML[A_HTML.rindex('</script>') + len('</script>'):]

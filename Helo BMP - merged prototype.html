@@ -5443,6 +5443,8 @@ body[data-focus] #gsearch,body[data-focus] #bell{display:none}
 :where(html[data-src="b"]) .ds-l > .ds-g:first-child{margin-top:0;border-top:0;padding-top:8px}
 /* merged: a table's hidden label (.sr) stays inside its scroll box, so a wide table never scrolls the whole page */
 .sk2-card > .tblscroll{position:relative}
+/* merged: the sticky cell holding an open row menu sits above the next rows, so the menu is never hidden */
+td:has(> .sk2-mw > .sk2-catm){z-index:31}
 
 </style>
 
@@ -6769,6 +6771,15 @@ function render(){
   $('#crumbs').innerHTML = crumbsHtml(page.crumbs || [['Home']]);
   $('#view').innerHTML = (page.head || '') + (page.tabs || '') + `<div class="content" id="content">${page.body || ''}</div>` + (page.actionbar || '');
   page.after && page.after();
+  fitRowMenus();
+}
+/* a row's ⋯ menu: drawn above the next rows, and opens upward when there's no room below it inside its card */
+function fitRowMenus(){
+  document.querySelectorAll('#view .sk2-catm').forEach(m => { const cell = m.closest('td'); if (cell) cell.style.zIndex = '31';   // its sticky cell sits above the next rows' sticky cells
+    const card = m.closest('.sk2-card'); if (!card) return;
+    const r = m.getBoundingClientRect(), c = card.getBoundingClientRect();
+    if (r.bottom > c.bottom - 4 && !m.classList.contains('up')) m.classList.add('up');
+    else if (r.top < c.top + 4 && m.classList.contains('up')) m.classList.remove('up'); });
 }
 
 const subTabs = (L, cur, act) => `<div class="seg-wrap"><div class="acl-tabs" role="tablist">${L.map(([k, l, n]) => `<button class="acl-vtab ${cur === k ? 'on' : ''}" role="tab" aria-selected="${cur === k}" data-act="${act}" data-k="${esc(k)}">${esc(l)}${n != null ? ` <b class="num">${n}</b>` : ''}</button>`).join('')}</div></div>`;
@@ -13111,8 +13122,9 @@ ACT['cr-impact-list'] = t => {
 };
 const liveUsing = code => S.deals.filter(d => d.stage === 'Live' && d.lines.some(l => l.on && l.code === code)).length;
 /* a SKU in any deal (open or live) can't be revised; returns the reason, or '' */
-const skuRevBlock = s => { if (!s) return ''; if (s.status !== 'Active') return `Only active SKUs can be revised. This one is ${s.status.toLowerCase()}.`;
+const skuRevBlock = s => { if (!s) return ''; if (s.status !== 'Active' && s.status !== 'Pending approval') return `Only active SKUs can be revised. This one is ${s.status.toLowerCase()}.`;
   const n = liveUsing(s.code) + openUsing(s.code).length; return n ? `Used in ${plural(n, 'deal')}. A SKU can’t be revised once a deal uses it.` : ''; };
+const skuPendingCr = s => s && s.status === 'Pending approval' ? S.changeReqs.find(c => c.status === 'Waiting for MD' && c.lines.some(l => l.code === s.code && l.field === 'New SKU')) : null;   // the request a new SKU is waiting in
 const openUsing = code => S.deals.filter(d => ['Draft','Waiting for Sales Manager','Waiting for MD','Sent back','Approved'].includes(d.stage) && d.lines.some(l => l.on && l.code === code));
 /* SKU approval cards: one per change request, with its lines, reason, impact and the MD's decision buttons.
    Shared by Price catalogue › SKU approval and Actions › SKU approval. */
@@ -13207,18 +13219,18 @@ ACT['sku-open'] = t => {
       <span class="b4 skd-vd">${h.to === '—' ? `Since ${h.from}` : `${h.from} – ${h.to}`}${h.by ? ' · ' + esc(h.by) : ''}</span>
       ${h.to === '—' ? tag('Current','ok') : ''}</div>`).join('')}</div></section>`;
   openDrawer(esc(s.name), `${s.code} · ${PROD(s.product).name}`, `${hero}${details}${usage}${appr}${feat ? '' : vers}`,
-    mk ? `${s.status === 'Draft' ? `<button class="btn btn-ghost" data-act="sku-discard" data-id="${s.code}" style="color:var(--danger-text)">Discard draft</button>` : ''}${['Draft','Sent back'].includes(s.status) && SKU_CREATE_PRODUCTS.includes(s.product) ? `<button class="btn btn-sec" data-act="sku-edit" data-id="${s.code}">${I('edit',16)}${s.status === 'Sent back' ? 'Fix and resubmit' : 'Edit draft'}</button>` : ''}${s.status === 'Inactive' ? `<button class="btn btn-sec" data-act="cr-new" data-id="${s.code}" data-k="remove" ${live ? `disabled title="Still on ${live} live deals"` : ''}>Remove</button>` : ''}${s.status === 'Draft' ? `<button class="btn btn-pri" data-act="sku-draft-submit" data-id="${s.code}">${I('send',16)}Submit for approval</button>` : s.status === 'Active' ? `<button class="btn btn-pri" data-act="sku-rev" data-id="${s.code}" ${skuRevBlock(s) ? `aria-disabled="true" data-tip="${esc(skuRevBlock(s))}"` : ''}>${I('edit',16)}Revise</button>` : ''}` : '');
+    mk ? `${s.status === 'Draft' ? `<button class="btn btn-ghost" data-act="sku-discard" data-id="${s.code}" style="color:var(--danger-text)">Discard draft</button>` : ''}${['Draft','Sent back'].includes(s.status) && SKU_CREATE_PRODUCTS.includes(s.product) ? `<button class="btn btn-sec" data-act="sku-edit" data-id="${s.code}">${I('edit',16)}${s.status === 'Sent back' ? 'Fix and resubmit' : 'Edit draft'}</button>` : ''}${s.status === 'Inactive' ? `<button class="btn btn-sec" data-act="cr-new" data-id="${s.code}" data-k="remove" ${live ? `disabled title="Still on ${live} live deals"` : ''}>Remove</button>` : ''}${s.status === 'Draft' ? `<button class="btn btn-pri" data-act="sku-draft-submit" data-id="${s.code}">${I('send',16)}Submit for approval</button>` : ['Active','Pending approval'].includes(s.status) ? `<button class="btn btn-pri" data-act="sku-rev" data-id="${s.code}" ${skuRevBlock(s) ? `aria-disabled="true" data-tip="${esc(skuRevBlock(s))}"` : ''}>${I('edit',16)}Revise</button>` : ''}` : '');
 };
 /* Revise one SKU from the listing: name, description and (for priced SKUs) base rate, in one change request to the MD */
 ACT['sku-rev'] = t => { if (t.getAttribute && t.getAttribute('aria-disabled') === 'true') return; if (skuRevBlock(sku(t.dataset.id))) return toast(skuRevBlock(sku(t.dataset.id)), 'err');
   const s = sku(t.dataset.id); if (!s || !can.sku()) return; closeOverlay();
   const feat = s.type === 'Feature';
-  const dup = S.changeReqs.find(c => c.status === 'Waiting for MD' && c.lines.some(l => l.code === s.code));
+  const pnew = skuPendingCr(s), dup = !pnew && S.changeReqs.find(c => c.status === 'Waiting for MD' && c.lines.some(l => l.code === s.code));
   openDialog(`Revise ${esc(s.name)}`, `
     <div class="b4" style="margin-top:-4px">${s.code} · v${skuVer(s)}${s.catalogName ? ' · ' + esc(s.catalogName) : ''} · ${esc(PROD(s.product).name)}</div>
-    ${dup ? note('warn', `${dup.id} for this SKU is already waiting for the MD. Wait for it before revising again.`) : ''}
+    ${dup ? note('warn', `${dup.id} for this SKU is already waiting for the MD. Wait for it before revising again.`) : pnew ? note('info', `This SKU is waiting for approval in ${pnew.id}. Your changes update that request.`) : ''}
     <div class="field"><label for="skr-n">SKU name</label><input class="inp" id="skr-n" value="${esc(s.name)}" maxlength="80" data-inp="skrchg"><div id="e-skrn"></div></div>
-    ${feat ? '' : `<div class="field"><label for="skr-v">Base rate (${s.cur})${s.unit && s.unit !== '—' ? ' per ' + esc(s.unit) : ''}</label><input class="inp num" id="skr-v" inputmode="decimal" value="${s.base}" data-inp="skrchg"><div class="b4">A new rate becomes v${skuVer(s) + 1} once approved. Live deals keep their rates.</div><div id="e-skrv"></div></div>`}
+    ${feat ? '' : `<div class="field"><label for="skr-v">Base rate (${s.cur})${s.unit && s.unit !== '—' ? ' per ' + esc(s.unit) : ''}</label><input class="inp num" id="skr-v" inputmode="decimal" value="${s.base}" data-inp="skrchg"><div class="b4">${pnew ? 'The new rate replaces the one waiting for approval.' : `A new rate becomes v${skuVer(s) + 1} once approved. Live deals keep their rates.`}</div><div id="e-skrv"></div></div>`}
     <div class="field"><label for="skr-d">Description${OPT}</label><textarea class="inp" id="skr-d" rows="3" data-inp="skrchg">${esc(s.desc || '')}</textarea></div>
     <div class="field"><label for="skr-r">Reason</label><textarea class="inp" id="skr-r" rows="2" placeholder="Why is this changing?"></textarea><div id="e-skrr"></div></div>`,
     `<span class="b4" id="skr-cnt" style="margin-right:auto">No changes yet</span><button class="btn btn-sec" data-act="close">Cancel</button><button class="btn btn-pri" data-act="sku-rev-ok" data-id="${s.code}" ${dup ? 'disabled' : ''}>${I('send',16)}Submit for approval</button>`);
@@ -13241,6 +13253,16 @@ ACT['sku-rev-ok'] = t => {
   E('skrr', r.length < 10 ? 'Give a reason of at least 10 characters.' : '');
   if (!bad && !L.length){ toast('Nothing has changed yet.', 'err'); return; }
   if (bad) return;
+  const pc = skuPendingCr(s);
+  if (pc){ const old = s.name;
+    L.forEach(l => { if (l._f === 'name') s.name = l.next; if (l._f === 'rate') s.base = l._v; if (l._f === 'desc') s.desc = l.next === '—' ? '' : l.next; });
+    pc.lines.forEach(l => { if (l.code === s.code && l.field === 'New SKU' && s.type !== 'Feature') l.next = `${rate(s.base, s.cur)} per ${s.unit}`; });
+    if (old !== s.name) pc.title = pc.title.split(old).join(s.name);
+    (pc.revs = pc.revs || []).push({by:meRaw().name, on:0, what:L.map(l => l.field).join(', '), reason:r});
+    const cur = typeof apCrCur === 'function' ? apCrCur(pc) : null;
+    (cur ? cur.names : [mdName()]).forEach(n => S.notifs.unshift({for:n, to:[], on:0, text:`${fullOf(meRaw().name)} revised ${s.code} in ${pc.id} (${L.map(l => l.field.toLowerCase()).join(', ')}). It still needs your approval.`, go:{v:'work', tab:'approvals', grp:'SKU approval'}}));
+    log('Revised SKU waiting for approval', pc.id, s.code, L.map(l => l.field).join(', '));
+    S._skr = null; closeOverlay(); toast(`${s.code} updated in ${pc.id}. It’s still waiting for approval.`, 'ok'); return render(); }
   const id = 'CR-0' + (143 + S.changeReqs.filter(c => +c.id.slice(3) > 142).length), open = openUsing(s.code), rl = L.find(l => l._f === 'rate');
   const cr = {id, title:`Revise · ${s.name}`, urgent:false, lines:L, reason:r, attach:'', maker:meRaw().name, on:0, status:'Waiting for MD',
     impact:{review:open.length, below:0, live:liveUsing(s.code), plans:0, revenue: rl ? ((rl._v / s.base - 1) * 100).toFixed(1) + '% on new deals' : '—'}};
@@ -14517,17 +14539,18 @@ const cmOutgoing = x => { for (const r of (S.changeReqs || [])) if (/^Waiting/.t
 const cmSkus = c => [...S.skus.filter(x => !x.legacy && x.catalogName === c.name && x.status !== 'Removed'), ...cmIncoming(c)];
 const cmShown = () => skuCatalogs().filter(c => cmSkus(c).length || c.made);
 function cmNav(active){
-  const L = cmShown(), item = c => { const n = cmSkus(c).length, on = active === 'cat:' + c.name;
-    return `<a href="#" class="ctl-item${on ? ' on' : ''}" data-act="cm-go" data-k="${esc(c.name)}" data-n="${esc((c.code + ' ' + c.name).toLowerCase())}" ${on ? 'aria-current="page"' : ''}><span class="ctl-it"><span class="ctl-name">${esc(c.name)}${c.archived ? ' <span class="ctl-mut">(archived)</span>' : ''}</span><span class="ctl-code">${esc(c.code)}</span></span><span class="ctl-tagc">${c.def ? '<span class="sk2-def ctl-deft">Default</span>' : ''}</span><span class="ctl-n num">${n}</span></a>`; };
+  const all = cmShown(), L = all.filter(c => !c.archived), AR = all.filter(c => c.archived), item = c => { const n = cmSkus(c).length, on = active === 'cat:' + c.name;
+    return `<a href="#" class="ctl-item${on ? ' on' : ''}" data-act="cm-go" data-k="${esc(c.name)}" data-n="${esc((c.code + ' ' + c.name).toLowerCase())}" ${on ? 'aria-current="page"' : ''}><span class="ctl-it"><span class="ctl-name">${esc(c.name)}</span><span class="ctl-code">${esc(c.code)}</span></span><span class="ctl-tagc">${c.def ? '<span class="sk2-def ctl-deft">Default</span>' : ''}</span><span class="ctl-n num">${n}</span></a>`; };
   return `<nav class="ctl-nav" aria-label="Catalogs">
     <div class="ctl-nh"><h2 class="ctl-nh-t">Catalogs <span class="ctl-n num">${L.length}</span></h2>${can.sku() ? `<button class="btn btn-sec sm" data-act="bk-open">${I('plus',14)}New catalog</button>` : ''}</div>
     ${L.length > 6 ? `<label class="search sm ctl-ns">${I('search',14)}<input type="search" id="cm-nq" placeholder="Search catalogs" aria-label="Search catalogs" autocomplete="off"></label>` : ''}
-    <div class="ctl-list">${L.map(item).join('')}</div><div class="b4 ctl-none" hidden>No catalogs match.</div>
+    <div class="ctl-list">${L.map(item).join('')}</div><div class="b4 ctl-none" hidden>No catalogs match.</div>${AR.length ? (open => `<div class="ctl-sep" role="separator"></div><a href="#" class="ctl-item ctl-wide" data-act="cm-arch" aria-expanded="${open}"><span class="ctl-name">Archived</span><span class="ctl-n num">${AR.length}</span></a>${open ? `<div class="ctl-list ctl-arch" aria-label="Archived catalogs">${AR.map(item).join('')}</div>` : ''}`)(!!S._cmArch || AR.some(c => active === 'cat:' + c.name)) : ''}
     <div class="ctl-sep" role="separator"></div>
     <a href="#" class="ctl-item ctl-wide${active === 'allskus' ? ' on' : ''}" data-act="cm-allskus" ${active === 'allskus' ? 'aria-current="page"' : ''}><span class="ctl-name">All SKUs</span><span class="ctl-n num">${S.skus.filter(x => !x.legacy && x.status !== 'Removed').length}</span></a>
     <a href="#" class="ctl-item ctl-wide${active === 'feats' ? ' on' : ''}" data-act="cm-feats" ${active === 'feats' ? 'aria-current="page"' : ''}><span class="ctl-name">SaaS features</span>${ftNew() ? `<span class="ft-navb">${ftNew()} new</span>` : `<span class="ctl-n num">${ftList().length}</span>`}</a>
     <a href="#" class="ctl-item ctl-wide${active === 'cats' ? ' on' : ''}" data-act="cm-cats" ${active === 'cats' ? 'aria-current="page"' : ''}><span class="ctl-name">Categories and tax</span><span class="ctl-n num">${bkCats().length}</span></a>
   </nav>`; }
+ACT['cm-arch'] = () => { S._cmArch = !S._cmArch; render(); };
 const cmShell = (active, inner) => `<div class="ctl-top"><h1 class="ctl-top-h">Catalogs</h1><button class="btn btn-sec ctl-tourb" data-act="cm-tour">${I('play',16)}Watch the tour</button>${can.sku() ? '' : `<button class="btn btn-sec" data-act="sku-as-maker" title="Creating SKUs is done by the SKU Maker">${I('user',16)}Switch to SKU Maker to create</button>`}</div>
   <div class="ctl"><div class="ctl-split">${cmNav(active)}<div class="ctl-main">${inner}</div></div></div>`;
 const cmChips = L => L.map(x => `<span class="ctl-chip">${esc(x)}</span>`).join('');

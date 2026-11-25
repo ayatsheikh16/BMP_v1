@@ -47,4 +47,13 @@ function render(){
   $('#crumbs').innerHTML = crumbsHtml(page.crumbs || [['Home']]);
   $('#view').innerHTML = (page.head || '') + (page.tabs || '') + `<div class="content" id="content">${page.body || ''}</div>` + (page.actionbar || '');
   page.after && page.after();
+  fitRowMenus();
+}
+/* a row's ⋯ menu: drawn above the next rows, and opens upward when there's no room below it inside its card */
+function fitRowMenus(){
+  document.querySelectorAll('#view .sk2-catm').forEach(m => { const cell = m.closest('td'); if (cell) cell.style.zIndex = '31';   // its sticky cell sits above the next rows' sticky cells
+    const card = m.closest('.sk2-card'); if (!card) return;
+    const r = m.getBoundingClientRect(), c = card.getBoundingClientRect();
+    if (r.bottom > c.bottom - 4 && !m.classList.contains('up')) m.classList.add('up');
+    else if (r.top < c.top + 4 && m.classList.contains('up')) m.classList.remove('up'); });
 }
