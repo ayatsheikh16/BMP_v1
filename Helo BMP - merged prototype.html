@@ -6680,7 +6680,17 @@ const V_ALIAS = {home:'home2', appr:'appr6', appr1b:'appr6', appr2:'appr6', appr
 function go(v, params = {}){
   v = V_ALIAS[v] || v;
   if (v === 'admin' && params.tab === 'appr') v = 'appr6';
-  if (AC_VIEWS.includes(v)) S._acGo = params;                     // the embedded page opens on what was asked for
+  /* account, workspace and deal pages live in the embedded Accounts module (the current design), never the old built-in ones.
+     Records are matched by name, since the module has its own copy of the sample data; a deal opens its workspace. */
+  if (AC_IN.includes(v) && AC_PEOPLE.includes(S.user)){
+    let to = Object.assign({v}, params);
+    if (v === 'deal' && params.id){ const d = S.deals.find(x => x.id === params.id), w = d && wsp(d.wid); to = w ? {v:'workspace', wsId:w.id, wsName:w.name} : {v:'accounts'}; }
+    else if (['workspace', 'trialcfg'].includes(v) && (params.id || params.wid)){ const w = wsp(params.id || params.wid); to = w ? {v, wsId:w.id, wsName:w.name} : {v:'accounts'}; }
+    else if (['account', 'journey'].includes(v) && params.id){ const a = acct(params.id); to = a ? {v, accId:a.id, accName:a.name} : {v:'accounts'}; }
+    else if (['plan', 'minv'].includes(v)) to = {v:'accounts'};
+    v = 'accounts'; params = {}; S._acGo = {__to:to};
+  }
+  else if (AC_VIEWS.includes(v)) S._acGo = params;                     // the embedded page opens on what was asked for
   if (!VIEWS[v] && v !== 'work0'){ toast(`This will open the ${LINK_NAME[v] || v} page once the modules are joined.`, 'info'); return; }
   S.route = Object.assign({v}, params); closeOverlay(); document.body.removeAttribute('data-nav'); render(); window.scrollTo(0,0); }
 function render(){
@@ -20590,6 +20600,7 @@ const AC_SRC = "PHRpdGxlPkhlbG8gQnVzaW5lc3MgTWFuYWdlbWVudCBQb3J0YWw8L3RpdGxlPgo8
    persona switcher drive it. One frame is kept for the whole session so its data survives navigation.
    ===================================================================== */
 const AC_VIEWS = ['accounts', 'work'];
+const AC_IN = ['account', 'workspace', 'deal', 'journey', 'plan', 'minv', 'trialcfg'];   // pages inside the Accounts module
 const AC_PEOPLE = ['meera', 'arun', 'dev', 'shubham', 'ishaan', 'kabir', 'riya', 'neel', 'zoya', 'nikhil'];   // the people the embedded file has (same teams as the dashboard)
 const AC_CSS = '<style>.side,.topbar{display:none!important}.shell{display:block!important;min-height:0!important}#view{min-height:100vh!important}.toasts{top:calc(12px + env(safe-area-inset-top,0px))!important}</style>';
 const acWin = () => { const f = document.getElementById('acframe'); return f && f.contentWindow && f.dataset.ready === '1' ? f.contentWindow : null; };
@@ -20622,7 +20633,13 @@ function acSync(){   // persona and route of the embedded page follow the portal
 function acShow(params){
   const f = document.getElementById('acframe');
   $('#view').innerHTML = ''; $('#view').style.display = 'none'; f.hidden = false; f.style.display = 'block';
-  const goIn = () => { acSync(); if (params) acRun(`go(${JSON.stringify(S.route.v)}, ${JSON.stringify(params)})`); else acRun('render()'); acCrumbs(); };   // redrawn so approvals stay current
+  const goIn = () => { acSync();
+    if (params && params.__to) acRun(`(() => { const r = ${JSON.stringify(params.__to)};
+      if (r.wsId || r.wsName){ const w = S.workspaces.find(x => x.id === r.wsId) || S.workspaces.find(x => x.name === r.wsName); if (!w) return go('accounts'); r.id = w.id; if (r.v === 'trialcfg') r.wid = w.id; }
+      if (r.accId || r.accName){ const a = S.accounts.find(x => x.id === r.accId) || S.accounts.find(x => x.name === r.accName); if (!a) return go('accounts'); r.id = a.id; }
+      delete r.wsId; delete r.wsName; delete r.accId; delete r.accName; go(r.v, r); })()`);
+    else if (params) acRun(`go(${JSON.stringify(S.route.v)}, ${JSON.stringify(params)})`); else acRun('render()');
+    acCrumbs(); };   // redrawn so approvals stay current
   if (!f.dataset.started){ acPreload(); }
   if (f.dataset.ready === '1') goIn();
   else f.addEventListener('load', () => setTimeout(() => { if (AC_VIEWS.includes(S.route.v)) goIn(); }, 0), {once:true});
